@@ -246,10 +246,10 @@ class AudioEngine:
             s.transpose_loops = 0
             return None
         if s.engine is None or s.mtype != m["type"]:
-            s.engine = synth.create_machine(m)
+            s.engine = synth.create_machine(m, sample_rate=self.sample_rate)
             s.mtype = m["type"]
         else:
-            s.engine.update(m)
+            s.engine.update(m, sample_rate=self.sample_rate)
         return s.engine
 
     def _fx_chain(self, holder, fx_states):

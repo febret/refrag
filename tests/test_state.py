@@ -61,6 +61,20 @@ class StateTests(unittest.TestCase):
         self.assertEqual(loaded.machine(0)["transpose"], 0)
         self.assertEqual(len(loaded.machine(0)["transpose_steps"]), 4)
 
+    def test_saved_song_can_be_loaded_from_disk(self):
+        self.room.apply({"op": "set_song_prop", "prop": "name", "value": "Saved Song"})
+        self.room.apply({"op": "add_machine", "slot": 0, "mtype": "subsynth"})
+        self.room.apply({"op": "set_param", "slot": 0, "param": "flt_cutoff", "value": 0.5})
+        self.room.save(force=True)
+
+        manager = state.RoomManager()
+        self.assertIn("test-room", manager.list())
+
+        loaded = state.Room("other-room")
+        self.assertTrue(loaded.load_snapshot("test-room"))
+        self.assertEqual(loaded.doc["name"], "Saved Song")
+        self.assertEqual(loaded.machine(0)["params"]["flt_cutoff"], 0.5)
+
     def test_looper_selects_immediately_without_engine(self):
         self.room.apply({"op": "add_machine", "slot": 0, "mtype": "subsynth"})
         self.room.doc["transport"]["mode"] = "song"

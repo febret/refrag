@@ -373,6 +373,7 @@ function showAppMenu() {
         let row = el("div", "menu-row", c);
         [["New", () => confirmBox("New song", "Clear the rack and all song data?",
             () => { send({ op: "new_song" }); })],
+         ["Load", async () => { await showLoadSongDialog(); }],
          ["Save", () => send({ op: "save_room" })],
          ["Export WAV", () => { exportSong(false); }],
          ["Export Loop", () => { exportSong(true); }],
@@ -492,6 +493,34 @@ function showAppMenu() {
       }
     }
   }, []);
+}
+
+async function showLoadSongDialog() {
+  let songs = [];
+  try {
+    const res = await fetch(`/api/songs?room=${encodeURIComponent(App.room)}`);
+    const data = await res.json();
+    songs = Array.isArray(data.songs) ? data.songs : [];
+  } catch (e) {
+    songs = [];
+  }
+  showModal("LOAD SONG", (body) => {
+    const list = el("div", "file-list", body);
+    if (!songs.length) {
+      const empty = el("div", "", list);
+      empty.textContent = "No saved songs found yet.";
+      return;
+    }
+    songs.forEach((song) => {
+      const item = el("div", "fitem", list);
+      item.textContent = song;
+      item.addEventListener("click", () => {
+        closeModal();
+        confirmBox("Load song", `Load "${song}" into the current room? Unsaved changes will be replaced.`,
+          () => send({ op: "load_room", name: song }));
+      });
+    });
+  });
 }
 
 function exportSong(loopOnly) {

@@ -46,6 +46,27 @@ class MachineRenderTests(unittest.TestCase):
         out = self.render_machine("beatbox", note=0, blocks=1)
         self.assertGreater(np.max(np.abs(out)), 0.01)
 
+    def test_beatbox_uses_assigned_sample_buffer(self):
+        m = state.new_machine("beatbox")
+        m["channels"][0]["sample"] = "impulse"
+        m["channels"][0]["params"].update({
+            "tune": 0,
+            "punch": 0.0,
+            "decay": 1.0,
+            "pan": 0.0,
+            "volume": 1.0,
+        })
+        impulse = np.concatenate([[1.0], np.zeros(255, dtype=np.float32)]).astype(np.float32)
+        orig_get = synth.samples.get
+        with mock.patch("server.synth.samples.get",
+                        side_effect=lambda name: impulse if name == "impulse"
+                        else orig_get(name)):
+            eng = synth.create_machine(m)
+            eng.note_on(0, 1.0)
+            out = eng.render(16, None)
+        self.assertGreater(out[0, 0], 0.45)
+        self.assertAlmostEqual(float(out[0, 0]), float(out[1, 0]), places=6)
+
     def test_padsynth(self):
         self.assertGreater(np.max(np.abs(self.render_machine("padsynth"))), 0.01)
 
@@ -87,6 +108,19 @@ class MachineRenderTests(unittest.TestCase):
         out = np.concatenate([eng.render(BLOCK, None) for _ in range(4)], axis=1)
         self.assertGreater(np.max(np.abs(out)), 0.001)
 
+    def test_vocoder_sample_modulator_updates_band_vu(self):
+        m = state.new_machine("vocoder")
+        m["modulators"][0]["source"] = "formant"
+        formant = np.sin(np.linspace(0, np.pi * 12, 4096)).astype(np.float32)
+        orig_get = synth.samples.get
+        with mock.patch("server.synth.samples.get",
+                        side_effect=lambda name: formant if name == "formant"
+                        else orig_get(name)):
+            eng = synth.create_machine(m)
+            eng.note_on(48, 1.0)
+            eng.render(BLOCK, None)
+        self.assertTrue(any(float(v) > 0.001 for v in eng.band_vu))
+
     def test_note_off_silences_voice(self):
         m = state.new_machine("subsynth")
         eng = synth.create_machine(m)
@@ -105,6 +139,33 @@ class MachineRenderTests(unittest.TestCase):
             eng.note_on(n, 1.0)
         live = [v for v in eng.voices if not v.dead]
         self.assertLessEqual(len(live), 2)
+
+    def test_pcmsynth_selects_zone_by_note_range(self):
+        m = state.new_machine("pcmsynth")
+        m["samples"] = [
+            {"sample": "low", "level": 1.0, "tune": 0, "pan": 0.0,
+             "root": 60, "low": 0, "high": 63, "mode": 0,
+             "start": 0.0, "end": 1.0},
+            {"sample": "high", "level": 1.0, "tune": 0, "pan": 0.0,
+             "root": 72, "low": 64, "high": 127, "mode": 0,
+             "start": 0.0, "end": 1.0},
+        ]
+        sample_map = {
+            "low": np.ones(512, dtype=np.float32),
+            "high": -np.ones(512, dtype=np.float32),
+        }
+        orig_get = synth.samples.get
+        with mock.patch("server.synth.samples.get",
+                        side_effect=lambda name: sample_map.get(
+                            name, orig_get(name))):
+            eng = synth.create_machine(m)
+            eng.note_on(48, 1.0)
+            out_low = eng.render(16, None)
+            eng.kill_all()
+            eng.note_on(84, 1.0)
+            out_high = eng.render(16, None)
+        self.assertGreater(float(np.mean(out_low)), 0.05)
+        self.assertLess(float(np.mean(out_high)), -0.05)
 
 
 class ExpressionTests(unittest.TestCase):

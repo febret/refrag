@@ -197,20 +197,38 @@ class Room:
         try:
             with open(self.path, "r", encoding="utf-8") as f:
                 doc = json.load(f)
-            base = new_room_doc()
-            base.update(doc)
-            _normalize_audio_settings(base)
-            for m in base["machines"]:
-                if m is not None:
-                    _normalize_transpose_steps(m)
-                    _normalize_looper_settings(m)
-            base["transport"]["playing"] = False
-            base["transport"]["record"] = False
-            self.doc = base
+            self.load_doc(doc)
         except FileNotFoundError:
             pass
         except Exception:
             pass
+
+    def load_doc(self, doc):
+        base = new_room_doc()
+        base.update(doc)
+        _normalize_audio_settings(base)
+        for m in base["machines"]:
+            if m is not None:
+                _normalize_transpose_steps(m)
+                _normalize_looper_settings(m)
+        base["transport"]["playing"] = False
+        base["transport"]["record"] = False
+        with self.lock:
+            self.doc = base
+            self.dirty = False
+            self.rev += 1
+            self._last_save = time.time()
+
+    def load_snapshot(self, name):
+        safe_name = _safe_name(name)
+        path = os.path.join(SESSION_DIR, safe_name + ".json")
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                doc = json.load(f)
+        except (FileNotFoundError, OSError, ValueError):
+            return False
+        self.load_doc(doc)
+        return True
 
     def save(self, force=False):
         with self.lock:
@@ -1033,6 +1051,15 @@ class RoomManager:
     def __init__(self):
         self.rooms = {}
         self.lock = threading.Lock()
+
+    def list(self):
+        if not os.path.isdir(SESSION_DIR):
+            return []
+        songs = []
+        for name in os.listdir(SESSION_DIR):
+            if name.endswith(".json"):
+                songs.append(os.path.splitext(name)[0])
+        return sorted(songs)
 
     def get(self, room_id):
         room_id = _safe_name(room_id or "default")

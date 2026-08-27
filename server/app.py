@@ -323,6 +323,21 @@ async def export_handler(request):
                                  f'attachment; filename="{name}"'})
 
 
+async def songs_handler(request):
+    return web.json_response({"songs": rooms.list()})
+
+
+async def load_song_handler(request):
+    room_id = request.query.get("room", "default")
+    song = request.query.get("song") or request.query.get("name")
+    if not song:
+        return web.json_response({"error": "song is required"}, status=400)
+    room = rooms.get(room_id)
+    if not room.load_snapshot(song):
+        return web.json_response({"error": "song not found"}, status=404)
+    return web.json_response({"ok": True, "song": song, "room": room.id})
+
+
 async def aimatch_handler(request):
     """AI Match: transcribe an uploaded WAV into the current pattern.
 
@@ -415,6 +430,17 @@ async def ws_handler(request):
             elif kind == "save_room":
                 room.save(force=True)
                 await sess.send(ws, {"type": "saved"})
+            elif kind == "load_room":
+                song = str(op.get("name") or op.get("song") or "")
+                if not song:
+                    await sess.send(ws, {"type": "error", "message": "No song selected"})
+                    continue
+                if room.load_snapshot(song):
+                    sess.engine.wake()
+                    await sess.broadcast_doc()
+                    await sess.send(ws, {"type": "loaded", "song": song})
+                else:
+                    await sess.send(ws, {"type": "error", "message": f"Song not found: {song}"})
             elif kind:
                 changed = room.apply(op)
                 if changed:
@@ -443,6 +469,9 @@ def make_app():
     app.router.add_get("/", index)
     app.router.add_get("/api/catalog", catalog_handler)
     app.router.add_get("/api/samples", samples_handler)
+    app.router.add_get("/api/songs", songs_handler)
+    app.router.add_get("/api/rooms", songs_handler)
+    app.router.add_get("/api/load", load_song_handler)
     app.router.add_post("/api/samples", upload_sample)
     app.router.add_post("/api/aimatch", aimatch_handler)
     app.router.add_get("/api/presets/{mtype}", presets_handler)
