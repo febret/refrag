@@ -294,6 +294,7 @@ struct ModularParams {
 struct MachineSpec {
     MachineKind kind = MachineKind::SubSynth;
     int poly = 8;
+    int cut_note = 0;
     bool mute = false;
     bool solo = false;
 

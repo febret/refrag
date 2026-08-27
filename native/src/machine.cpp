@@ -163,17 +163,31 @@ void MachineEngine::note_on(int note, float vel, int offset, int flags) {
 
     double previous_note = static_cast<double>(note);
     bool had_voice = false;
+    bool has_same_pitch = false;
     for (const auto &v : voices_) {
         if (!v.dead) {
             previous_note = v.note;
             had_voice = true;
+            if (v.note == note) {
+                has_same_pitch = true;
+            }
         }
     }
 
     if (spec_.kind == MachineKind::BassLine || spec_.kind == MachineKind::Modular) {
-        // Monophonic families: the newest note takes over the machine.
+        // Monophonic families always cut other pitches; same-pitch retriggers can
+        // optionally layer by leaving existing voices alive.
         for (auto &v : voices_) {
-            v.dead = true;
+            if (!v.dead && (!has_same_pitch || spec_.cut_note != 0 || v.note != note)) {
+                v.dead = true;
+            }
+        }
+        compact();
+    } else if (spec_.cut_note != 0) {
+        for (auto &v : voices_) {
+            if (!v.dead && v.note == note) {
+                v.dead = true;
+            }
         }
         compact();
     }
@@ -190,10 +204,15 @@ void MachineEngine::note_on(int note, float vel, int offset, int flags) {
 }
 
 void MachineEngine::note_off(int note, int offset) {
+    Voice *victim = nullptr;
     for (auto &v : voices_) {
-        if (!v.dead && v.note == note && v.released_at < 0) {
-            v.released_at = v.t + std::max(0, offset);
+        if (!v.dead && v.note == note && v.released_at < 0 &&
+            (victim == nullptr || v.serial < victim->serial)) {
+            victim = &v;
         }
+    }
+    if (victim != nullptr) {
+        victim->released_at = victim->t + std::max(0, offset);
     }
 }
 

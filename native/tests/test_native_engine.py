@@ -220,6 +220,34 @@ class RoomEngineTests(unittest.TestCase):
         self.assertEqual(engine.status()["slot_voice_counts"][0], 0)
         self.assertLess(peak(out), 1e-3)
 
+    def test_same_pitch_note_off_preserves_newer_held_voice(self):
+        machine = state.new_machine("subsynth")
+        machine["params"]["vol_release"] = 0.3
+        engine = new_room(make_doc([machine]))
+        engine.note_on(0, 60, 1.0)
+        engine.render(BLOCK, 120.0)
+        engine.note_on(0, 60, 1.0)
+        self.assertEqual(engine.status()["slot_voice_counts"][0], 2)
+        engine.note_off(0, 60)
+        for _ in range(40):
+            out = engine.render(BLOCK, 120.0)
+        self.assertEqual(engine.status()["slot_voice_counts"][0], 1)
+        self.assertGreater(peak(out), 1e-3)
+        engine.note_off(0, 60)
+        for _ in range(40):
+            out = engine.render(BLOCK, 120.0)
+        self.assertEqual(engine.status()["slot_voice_counts"][0], 0)
+        self.assertLess(peak(out), 1e-3)
+
+    def test_cut_note_retrigger_replaces_same_pitch_voice(self):
+        machine = state.new_machine("subsynth")
+        machine["params"].update({"vol_release": 0.3, "cut_note": 1})
+        engine = new_room(make_doc([machine]))
+        engine.note_on(0, 60, 1.0)
+        engine.render(BLOCK, 120.0)
+        engine.note_on(0, 60, 1.0)
+        self.assertEqual(engine.status()["slot_voice_counts"][0], 1)
+
     def test_sample_rate_changes_playback_pitch(self):
         low = new_room(make_doc([state.new_machine("subsynth")], sample_rate=22050))
         high = new_room(make_doc([state.new_machine("subsynth")], sample_rate=44100))

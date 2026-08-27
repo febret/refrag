@@ -55,6 +55,10 @@ def toggle(label, default=0):
     return {"type": "toggle", "label": label, "default": default}
 
 
+def cut_note_toggle(default=0):
+    return toggle("Cut Note", default)
+
+
 # ---------------------------------------------------------------------------
 # Machines
 # ---------------------------------------------------------------------------
@@ -94,6 +98,7 @@ MACHINES = {
             "vol_decay": knob("Decay", 0, 1, 0.0),
             "vol_sustain": knob("Sustain", 0, 1, 1.0),
             "vol_release": knob("Release", 0, 1, 0.05),
+            "cut_note": cut_note_toggle(0),
             "volume": knob("Volume", 0, 2, 1.0),
         },
     },
@@ -120,6 +125,7 @@ MACHINES = {
             "vol_decay": knob("Decay", 0, 1, 0.0),
             "vol_sustain": knob("Sustain", 0, 1, 1.0),
             "vol_release": knob("Release", 0, 1, 0.05),
+            "cut_note": cut_note_toggle(0),
             "volume": knob("Volume", 0, 2, 1.0),
         },
         # Per-sample slot settings live in machine["samples"], not controls.
@@ -191,6 +197,7 @@ MACHINES = {
             "vol_decay": knob("Decay", 0, 1, 0.3),
             "vol_sustain": knob("Sustain", 0, 1, 1.0),
             "vol_release": knob("Release", 0, 1, 0.4),
+            "cut_note": cut_note_toggle(0),
             "volume": knob("Volume", 0, 2, 1.0),
         },
         "harmonics": 24,   # editable bars per table (+1 width bar)
@@ -309,6 +316,7 @@ MACHINES = {
             "op3_decay": knob("Decay", 0, 1, 0.3),
             "op3_sustain": knob("Sustain", 0, 1, 0.7),
             "op3_release": knob("Release", 0, 1, 0.1),
+            "cut_note": cut_note_toggle(0),
             "volume": knob("Volume", 0, 2, 1.0),
         },
     },

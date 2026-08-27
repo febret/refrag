@@ -173,6 +173,34 @@ class MachineRenderTests(unittest.TestCase):
             out = graph.render()
         self.assertLess(np.max(np.abs(out)), 1e-3)
 
+    def test_same_pitch_note_off_preserves_newer_held_voice(self):
+        machine = state.new_machine("subsynth")
+        machine["params"]["vol_release"] = 0.3
+        graph = MachineGraph(machine)
+        graph.note_on(60, 1.0)
+        graph.render()
+        graph.note_on(60, 1.0)
+        self.assertEqual(graph.voice_count(), 2)
+        graph.note_off(60)
+        for _ in range(40):
+            out = graph.render()
+        self.assertEqual(graph.voice_count(), 1)
+        self.assertGreater(np.max(np.abs(out)), 1e-3)
+        graph.note_off(60)
+        for _ in range(40):
+            out = graph.render()
+        self.assertEqual(graph.voice_count(), 0)
+        self.assertLess(np.max(np.abs(out)), 1e-3)
+
+    def test_cut_note_retrigger_replaces_same_pitch_voice(self):
+        machine = state.new_machine("subsynth")
+        machine["params"].update({"vol_release": 0.3, "cut_note": 1})
+        graph = MachineGraph(machine)
+        graph.note_on(60, 1.0)
+        graph.render()
+        graph.note_on(60, 1.0)
+        self.assertEqual(graph.voice_count(), 1)
+
     def test_polyphony_limit(self):
         m = state.new_machine("subsynth")
         m["poly"] = 2

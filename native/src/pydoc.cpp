@@ -458,6 +458,9 @@ MachineSpec parse_machine(const py::handle &obj) {
     spec.width2 = top.f("width2", 0.3f);
 
     Params params(get_item(obj, "params"));
+    int cut_note_default =
+        (spec.kind == MachineKind::BassLine || spec.kind == MachineKind::Modular) ? 1 : 0;
+    spec.cut_note = params.flag("cut_note", cut_note_default);
     switch (spec.kind) {
     case MachineKind::SubSynth:
         parse_subsynth(params, &spec.sub);

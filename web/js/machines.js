@@ -87,6 +87,9 @@ function buildKeyboardFooter(panel, slot, m) {
 function outGroup(body, slot, m, withVu = true) {
   const g = makeGroup("OUT", body);
   g.row.appendChild(paramWidget(slot, m, "volume"));
+  if (Object.prototype.hasOwnProperty.call(m.params, "cut_note")) {
+    g.row.appendChild(paramWidget(slot, m, "cut_note"));
+  }
   if (withVu) {
     const vu = makeVU();
     g.row.appendChild(vu);
