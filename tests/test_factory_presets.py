@@ -6,8 +6,8 @@ import unittest
 
 import numpy as np
 
-from server import catalog, factory_presets, state, synth
-from server.engine import BLOCK
+from server import catalog, factory_presets, state
+from server.engine import AudioEngine
 
 
 class FactoryPresetTests(unittest.TestCase):
@@ -57,6 +57,12 @@ class FactoryPresetTests(unittest.TestCase):
                                         f"{mtype}/{name}: {pid}")
 
     def test_every_preset_loads_and_renders(self):
+        """Render every preset through the native room graph.
+
+        This is also what validates bitsynth expressions: the native parser
+        renders an unparsable expression as silence, so a broken preset trips
+        the non-silent assertion below.
+        """
         room = state.Room("preset-test")
         room.doc = state.new_room_doc()
         for mtype, presets in factory_presets.PRESETS.items():
@@ -66,11 +72,12 @@ class FactoryPresetTests(unittest.TestCase):
                                 f"load failed: {mtype}/{name}")
                 m = room.doc["machines"][0]
                 self.assertEqual(m["preset"], state._safe_name(name))
-                eng = synth.create_machine(m)
+                # A fresh room graph per preset renders slot 0 in isolation.
+                engine = AudioEngine(room)
                 note = 0 if mtype == "beatbox" else 48
-                eng.note_on(note, 1.0)
+                engine.handle_note(0, note, True, 1.0)
                 out = np.concatenate(
-                    [eng.render(BLOCK, None) for _ in range(3)], axis=1)
+                    [engine.render_block() for _ in range(3)], axis=1)
                 self.assertTrue(np.all(np.isfinite(out)),
                                 f"{mtype}/{name} produced NaN/inf")
                 self.assertGreater(np.max(np.abs(out)), 1e-4,
@@ -104,13 +111,6 @@ class FactoryPresetTests(unittest.TestCase):
         for name, data in factory_presets.PRESETS["padsynth"].items():
             self.assertEqual(len(data["harm1"]), n, name)
             self.assertEqual(len(data["harm2"]), n, name)
-
-    def test_bitsynth_expressions_compile(self):
-        for name, data in factory_presets.PRESETS["bitsynth"].items():
-            self.assertIsNotNone(synth.compile_expr(data["expr_a"]),
-                                 f"{name}: expr_a")
-            self.assertIsNotNone(synth.compile_expr(data["expr_b"]),
-                                 f"{name}: expr_b")
 
 
 if __name__ == "__main__":

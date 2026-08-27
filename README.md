@@ -1,9 +1,10 @@
 # Refrag - Web-based multi-user Caustic Sound Studio
 
 Refrag is a collaborative, rack-based virtual DAW inspired by Caustic 3.1. Sound
-is synthesized on the Python server and streamed to every browser in a shared
-room. Machine controls, patterns, transport, mixer state, effects, and
-automation are synchronized over WebSockets and persisted as room snapshots.
+is synthesized by a native C++ audio engine on the server and streamed to every
+browser in a shared room. Machine controls, patterns, transport, mixer state,
+effects, and automation are synchronized over WebSockets and persisted as room
+snapshots.
 
 Refrag includes all 11 Caustic sound-machine families, all 16 insert effects,
 a 14-machine rack, two effects slots per channel, mixer, master section,
@@ -16,6 +17,7 @@ Python 3.11 or newer is recommended.
 
 ```sh
 python -m pip install -r requirements.txt
+python -m pip install .
 ./start.sh
 ```
 
@@ -23,8 +25,14 @@ On Windows:
 
 ```bat
 python -m pip install -r requirements.txt
+python -m pip install .
 start.bat
 ```
+
+`python -m pip install .` builds and installs the native `refrag_engine` audio
+extension, which the server requires. It needs a C++20 compiler (MSVC, Clang or
+GCC); CMake and Ninja are fetched automatically. Rebuild it with the same
+command after changing anything under `native/`.
 
 Open `https://localhost:8000`. To choose a collaborative room, use
 `https://localhost:8000/?room=your-room`. Share that URL with other musicians.
@@ -65,9 +73,11 @@ restart to regenerate the self-signed certificate.
 - `server/app.py` serves the web app, room API, WebSocket, transport clock, and
   WAV export.
 - `server/state.py` owns collaborative room state and JSON persistence.
-- `server/synth.py` renders audio for all 11 machine families;
-  `server/effects.py` implements the 16 insert effects and
-  `server/engine.py` runs the sequencer, mixer and master chain.
+- `native/` implements all 11 machine families, all 16 insert effects, mixer
+  strips, sends, and the master chain in the `refrag_engine` C++ extension.
+- `server/engine.py` orchestrates transport, sequencing, automation, and one
+  native room-graph render call per block; `server/synth.py` manages the native
+  binding and render-sample registration.
 - `server/catalog.py` defines the controls exposed by all rack devices.
 - `server/samples.py` procedurally generates the factory drum kit,
   instrument samples and vocoder loops.
@@ -80,4 +90,5 @@ See `doc/user-guide.md` for the full manual.
 
 ```sh
 python -m unittest discover -s tests -v
+python native/tests/test_native_engine.py
 ```

@@ -5,13 +5,15 @@ Guidance for AI coding agents working in this repository.
 ## Project Overview
 
 Refrag is a collaborative, rack-based virtual DAW inspired by Caustic 3.1.
-Audio is synthesized on the Python server and streamed to browsers in shared
-rooms. Machine controls, patterns, transport, mixer state, effects, and
-automation are synchronized over WebSockets and persisted as room snapshots.
+Audio is synthesized by the native C++ engine on the server and streamed to
+browsers in shared rooms. Machine controls, patterns, transport, mixer state,
+effects, and automation are synchronized over WebSockets and persisted as room
+snapshots.
 
 ## Tech Stack
 
-- **Server**: Python 3.11+, `aiohttp` (web server + WebSockets), `numpy`/`scipy` (DSP)
+- **Server**: Python 3.11+, `aiohttp` (web server + WebSockets), `numpy`/`scipy` (asset and analysis utilities)
+- **Audio engine**: C++20/pybind11 (`native/`) for all render-path DSP
 - **Client**: Dependency-free vanilla HTML/CSS/JS (`web/`), with an AudioWorklet (`web/worklet.js`)
 - **No frontend build step** — edit files in `web/` directly; no bundler, no npm.
 
@@ -21,12 +23,17 @@ automation are synchronized over WebSockets and persisted as room snapshots.
 # Install dependencies
 python -m pip install -r requirements.txt
 
+# Build and install the native refrag_engine audio extension (requires a C++20
+# compiler); re-run after any change under native/
+python -m pip install .
+
 # Run the server (serves web app on http://localhost:8000)
 ./start.sh          # or: start.bat on Windows
 # Custom port: set REFRAG_PORT env var before launching
 
 # Run tests
 python -m unittest discover -s tests -v
+python native/tests/test_native_engine.py
 ```
 
 There is no linter/formatter configured; match the existing code style.
@@ -37,9 +44,8 @@ There is no linter/formatter configured; match the existing code style.
 server/
   app.py             # HTTP + WebSocket server, room API, transport clock, WAV export
   state.py           # Collaborative room state, JSON persistence to data/sessions/
-  synth.py           # Audio rendering for all 11 machine families
-  effects.py         # The 16 insert effects
-  engine.py          # Sequencer, mixer, master chain
+  synth.py           # Native binding and render-sample registration
+  engine.py          # Transport/sequencer/automation orchestration
   catalog.py         # Control definitions for all rack devices
   samples.py         # Procedural generation of factory drum kit / instrument samples / vocoder loops
   factory_presets.py # Factory preset definitions (data/presets/)
@@ -56,10 +62,10 @@ doc/user-guide.md    # Full user manual
 
 ## Architecture Notes
 
-- **State flow**: browser → WebSocket → `state.py` (room state) → `engine.py`/`synth.py` render → streamed audio back to all clients.
+- **State flow**: browser → WebSocket → `state.py` (room state) → `engine.py` orchestration → native `refrag_engine` room graph → streamed audio back to all clients.
 - **Single source of truth** for device controls is `server/catalog.py`. When adding a control, update the catalog first; the web UI reads control metadata from it.
 - **Machine families** (11): bassline, beatbox, bitsynth, fmsynth, kssynth, modular, organ, padsynth, pcmsynth, subsynth, vocoder. Each has presets under `data/presets/<family>/`.
-- **Effects** (16 insert effects) live in `server/effects.py`; each channel has two insert slots plus a master section.
+- **Effects** (16 insert effects), machines, mixer strips, sends, and the master chain live in `native/`; each channel has two insert slots plus a master section.
 - Room snapshots are written to `data/sessions/*.json` on change. Treat these as runtime data.
 
 ## Conventions
@@ -71,11 +77,11 @@ doc/user-guide.md    # Full user manual
 
 ## When Making Changes
 
-1. **New machine control / parameter**: add to `server/catalog.py`, wire into the relevant renderer in `server/synth.py` (or `effects.py`), and ensure the client editor renders it (usually automatic via catalog).
-2. **New effect**: implement in `server/effects.py`, register in the effect list/catalog, verify it appears in both insert slots and master chain.
-3. **DSP changes**: keep rendering deterministic per tick; be mindful of real-time performance (numpy vectorized ops preferred over Python loops).
+1. **New machine control / parameter**: add to `server/catalog.py`, wire it into the relevant native renderer, and ensure the client editor renders it (usually automatic via catalog).
+2. **New effect**: implement it in the native engine, register it in the effect list/catalog, and verify it appears in both insert slots and the master chain.
+3. **DSP changes**: keep rendering deterministic per tick; keep sample-block processing in C++ and avoid Python/NumPy fallbacks.
 4. **Protocol changes** (WebSocket messages): update both `server/app.py` and `web/js/audio.js`/`app.js` together.
-5. **Run the test suite** after changes: `python -m unittest discover -s tests -v`.
+5. **Rebuild and run the test suites** after changes: `python -m pip install .` (whenever `native/` changed), then `python -m unittest discover -s tests -v` and `python native/tests/test_native_engine.py`.
 6. Do not commit changes to `data/sessions/` room files created during local testing.
 
 ## Testing Notes

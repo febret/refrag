@@ -11,8 +11,7 @@ import random
 
 import numpy as np
 
-from . import catalog, effects, synth
-from .dsp import Biquad, cutoff_hz, onepole_smooth
+from . import synth
 from .state import (AUDIO_DEFAULT_BLOCK_SIZE, AUDIO_DEFAULT_SAMPLE_RATE, BANKS,
                     BEATS_PER_MEASURE)
 
@@ -31,27 +30,8 @@ def shuffle_offset(beat, mode, amount):
     return div * amount * 0.5 if idx % 2 == 1 else 0.0
 
 
-def _width_buffer_len(sample_rate, block_size):
-    return max(2048, int(sample_rate * 0.02), int(block_size))
-
-
-def _resize_tail_buffer(buf, target_len):
-    if target_len == buf.shape[1]:
-        return buf
-    out = np.zeros((2, target_len))
-    copy_len = min(target_len, buf.shape[1])
-    if copy_len:
-        out[:, -copy_len:] = buf[:, -copy_len:]
-    return out
-
-
 class MachineSlot:
-    def __init__(self, sample_rate, block_size):
-        self.engine = None
-        self.mtype = None
-        self.fx = [None, None]        # (etype, effect instance)
-        self.eq = [Biquad() for _ in range(6)]   # 3 bands x stereo
-        self.width_buf = np.zeros((2, _width_buffer_len(sample_rate, block_size)))
+    def __init__(self):
         self.vu = 0.0
         self.active_offs = []         # [(beat_off, note), ...] pending note-offs
         self.machine_ref = None
@@ -69,19 +49,13 @@ class AudioEngine:
         self.sample_rate = AUDIO_DEFAULT_SAMPLE_RATE
         self.block_size = AUDIO_DEFAULT_BLOCK_SIZE
         self._sync_audio_config(room.doc, force=True)
-        self.slots = [
-            MachineSlot(self.sample_rate, self.block_size)
-            for _ in range(len(room.doc["machines"]))
-        ]
-        self.master_fx = [None, None]
-        self.master_delay = MasterDelay(self.sample_rate)
-        self.master_reverb = effects.Reverb(sample_rate=self.sample_rate)
-        self.master_eq = [Biquad() for _ in range(6)]
-        self.master_lim = effects.Limiter(sample_rate=self.sample_rate)
+        self.slots = [MachineSlot() for _ in range(len(room.doc["machines"]))]
+        self.graph = synth.NativeRoomEngine(
+            self.sample_rate, self.block_size, len(self.slots))
         self.pos = float(room.doc["transport"].get("pos", 0.0))
-        self.prev_outputs = {}
         self.master_vu = (0.0, 0.0)
         self.lim_gr = 0.0
+        self._native_status = {}
         self.auto_values = {}     # (slot,param)->value currently applied
         self.live_recorded = {}   # (slot,note)->onset beat for live rec
         self._idle_blocks = 0
@@ -101,14 +75,9 @@ class AudioEngine:
         return True
 
     def _refresh_audio_runtime_state(self):
-        self.master_delay = MasterDelay(self.sample_rate)
-        self.master_reverb = effects.Reverb(sample_rate=self.sample_rate)
-        self.master_lim = effects.Limiter(sample_rate=self.sample_rate)
-        self.master_fx = [None, None]
-        for s in self.slots:
-            s.fx = [None, None]
-            s.width_buf = _resize_tail_buffer(
-                s.width_buf, _width_buffer_len(self.sample_rate, self.block_size))
+        self.graph = synth.NativeRoomEngine(
+            self.sample_rate, self.block_size, len(self.slots))
+        self._native_status = {}
 
     # -- external control ---------------------------------------------------
 
@@ -135,8 +104,7 @@ class AudioEngine:
             s.transpose_step = 0
             s.transpose_loops = 0
             s.active_offs = []
-            if s.engine:
-                s.engine.all_off()
+            self.graph.all_off(idx)
 
     def transport_updated(self, was_playing, old_mode):
         t = self.room.doc["transport"]
@@ -195,17 +163,15 @@ class AudioEngine:
             m = self.room.machine(slot)
             if m is None:
                 return
-            eng = self._engine_for(slot)
-            if eng is None:
-                return
+            self.graph.sync(doc)
             t = doc["transport"]
             if on:
-                eng.note_on(int(note), float(vel), 0, int(flags))
+                self.graph.note_on(slot, int(note), float(vel), 0, int(flags))
                 self._idle_blocks = 0
                 if t["record"] and t["playing"] and t["mode"] == "pattern":
                     self.live_recorded[(slot, int(note))] = self.pos
             else:
-                eng.note_off(int(note))
+                self.graph.note_off(slot, int(note))
                 key = (slot, int(note))
                 if key in self.live_recorded:
                     onset = self.live_recorded.pop(key)
@@ -231,39 +197,6 @@ class AudioEngine:
 
     on_state_change = None    # set by app.py to broadcast live-recorded notes
 
-    # -- engine management ----------------------------------------------------
-
-    def _engine_for(self, slot_idx):
-        m = self.room.machine(slot_idx)
-        s = self.slots[slot_idx]
-        if m is None:
-            s.engine = None
-            s.mtype = None
-            s.machine_ref = None
-            s.active_pattern = None
-            s.queued_patterns = []
-            s.transpose_step = 0
-            s.transpose_loops = 0
-            return None
-        if s.engine is None or s.mtype != m["type"]:
-            s.engine = synth.create_machine(m, sample_rate=self.sample_rate)
-            s.mtype = m["type"]
-        else:
-            s.engine.update(m, sample_rate=self.sample_rate)
-        return s.engine
-
-    def _fx_chain(self, holder, fx_states):
-        """Sync effect instances with state list [{type,params,bypass},...]."""
-        for i in range(2):
-            st = fx_states[i] if fx_states else None
-            cur = holder[i]
-            if st is None:
-                holder[i] = None
-            elif cur is None or cur[0] != st["type"]:
-                holder[i] = (st["type"], effects.create_effect(
-                    st["type"], sample_rate=self.sample_rate))
-        return holder
-
     # -- sequencing -----------------------------------------------------------
 
     def _sync_pattern_slot(self, slot_idx, m, origin):
@@ -288,8 +221,7 @@ class AudioEngine:
             s.transpose_step = 0
             s.transpose_loops = 0
             s.active_offs = []
-            if s.engine:
-                s.engine.all_off()
+            self.graph.all_off(slot_idx)
 
     @staticmethod
     def _normalize_looper_mode(m):
@@ -493,7 +425,7 @@ class AudioEngine:
             emit(self._song_event_cache[slot_idx], b0, b1, 0, self._current_transpose(slot_idx, m))
         return events
 
-    def _apply_events(self, slot_idx, eng, events, b0, spb):
+    def _apply_events(self, slot_idx, events, b0, spb):
         """spb = samples per beat."""
         s = self.slots[slot_idx]
         block_size = self.block_size
@@ -502,15 +434,15 @@ class AudioEngine:
         s.active_offs = [e for e in s.active_offs if e[0] >= b0 + block_size / spb]
         for off_t, key in due:
             off = int(max(0, (off_t - b0) * spb))
-            eng.note_off(key, min(off, block_size - 1))
+            self.graph.note_off(slot_idx, key, min(off, block_size - 1))
         for t, kind, key, vel, flags in sorted(events):
             off = int(max(0, (t - b0) * spb))
             if kind == "on":
                 if off < block_size:
-                    eng.note_on(key, vel, off, flags)
+                    self.graph.note_on(slot_idx, key, vel, off, flags)
             else:
                 if off < block_size:
-                    eng.note_off(key, off)
+                    self.graph.note_off(slot_idx, key, off)
                 else:
                     s.active_offs.append((t, key))
 
@@ -602,110 +534,64 @@ class AudioEngine:
         auto = self._apply_automation(doc)
 
         machines = doc["machines"]
-        any_solo = any(m and m["solo"] for m in machines)
-        mix = np.zeros((2, n))
-        send_delay = np.zeros((2, n))
-        send_reverb = np.zeros((2, n))
-        outputs = {}
-        lines = {}
+        for (slot, param), value in auto.items():
+            if slot >= 0 and not param.startswith("mixer."):
+                machine = self.room.machine(slot)
+                if machine is not None and param in machine["params"]:
+                    machine["params"][param] = value
+
+        render_doc = doc
+        master_auto = {
+            param: value for (slot, param), value in auto.items()
+            if slot == -1 and param in doc["master"]["params"]
+        }
+        mixer_auto = {
+            (slot, param[6:]): value for (slot, param), value in auto.items()
+            if slot >= 0 and param.startswith("mixer.")
+        }
+        if master_auto or mixer_auto:
+            render_doc = dict(doc)
+        if master_auto:
+            master = dict(doc["master"])
+            master["params"] = dict(master["params"])
+            master["params"].update(master_auto)
+            render_doc["master"] = master
+        if mixer_auto:
+            render_machines = list(machines)
+            render_doc["machines"] = render_machines
+            copied_slots = {}
+            for (slot, param), value in mixer_auto.items():
+                machine = render_machines[slot]
+                if machine is None:
+                    continue
+                if slot not in copied_slots:
+                    machine = dict(machine)
+                    machine["mixer"] = dict(machine["mixer"])
+                    render_machines[slot] = machine
+                    copied_slots[slot] = machine
+                copied_slots[slot]["mixer"][param] = value
+
+        self.graph.sync(render_doc)
 
         for idx, m in enumerate(machines):
             s = self.slots[idx]
             if m is None:
                 s.vu = 0.0
                 continue
-            eng = self._engine_for(idx)
-            if eng is None:
-                continue
             if t["playing"]:
                 events = self._pattern_events(idx, m, b0, b1, doc)
-                self._apply_events(idx, eng, events, b0, spb)
+                self._apply_events(idx, events, b0, spb)
 
-            # machine-level automation overrides
-            slot_auto = {p: v for (sl, p), v in auto.items() if sl == idx
-                         and not p.startswith("mixer.")}
-            if slot_auto:
-                for pkey, val in slot_auto.items():
-                    if pkey in m["params"]:
-                        m["params"][pkey] = val
-
-            if not eng.active() and not (t["playing"]):
-                dry = np.zeros((2, n))
-            else:
-                ctx = {"outputs": outputs, "prev_outputs": self.prev_outputs,
-                       "bpm": bpm, "lines": lines}
-                dry = eng.render(n, ctx)
-            outputs[idx] = dry
-
-            # insert effects
-            self._fx_chain(s.fx, m["effects"])
-            wet = dry
-            for i in range(2):
-                st = m["effects"][i]
-                if st and s.fx[i] and not st.get("bypass"):
-                    ctx = {"bpm": bpm, "lines": lines}
-                    wet = s.fx[i][1].process(wet, st["params"], ctx)
-
-            # mixer strip
-            mx = dict(m["mixer"])
-            for (sl, pkey), val in auto.items():
-                if sl == idx and pkey.startswith("mixer."):
-                    mx[pkey[6:]] = val
-            wet = self._strip(s, wet, mx)
-            lines[idx] = wet
-            s.vu = float(np.max(np.abs(wet))) if wet.size else 0.0
-
-            muted = m["mute"] or (any_solo and not m["solo"])
-            if not muted:
-                vol = mx["volume"]
-                sig = wet * vol
-                mix += sig
-                if mx["send_delay"] > 0:
-                    send_delay += sig * mx["send_delay"]
-                if mx["send_reverb"] > 0:
-                    send_reverb += sig * mx["send_reverb"]
-
-        self.prev_outputs = outputs
-
-        if (np.max(np.abs(mix)) > 1e-6 or
-                np.max(np.abs(send_delay)) > 1e-6 or
-                np.max(np.abs(send_reverb)) > 1e-6):
-            self._tail_blocks = int(8 * self.sample_rate / self.block_size)
-        elif self._tail_blocks > 0:
-            self._tail_blocks -= 1
-
-        # master section
-        mp = dict(doc["master"]["params"])
-        for (sl, pkey), val in auto.items():
-            if sl == -1 and pkey in mp:
-                mp[pkey] = val
-
-        if mp["dly_bypass"]:
-            mix = mix + self.master_delay.process(send_delay, mp, bpm) * mp["dly_wet"]
-        if mp["rev_bypass"]:
-            rp = {"room": mp["rev_room"], "damp": mp["rev_damping"],
-                  "delay": mp["rev_predelay"], "width": mp["rev_stereo_spread"],
-                  "wet": 1.0}
-            rev = self.master_reverb.process(send_reverb, rp, None) - send_reverb * 0.6
-            mix = mix + rev * mp["rev_wet"]
-
-        self._fx_chain(self.master_fx, doc["master"]["effects"])
-        for i in range(2):
-            st = doc["master"]["effects"][i]
-            if st and self.master_fx[i] and not st.get("bypass"):
-                mix = self.master_fx[i][1].process(mix, st["params"], {"bpm": bpm})
-
-        if mp["eq_bypass"]:
-            mix = self._master_eq(mix, mp)
-        if mp["lim_bypass"]:
-            lp = {"pre": mp["lim_pre"], "attack": mp["lim_attack"],
-                  "release": mp["lim_release"], "post": mp["lim_post"]}
-            mix = self.master_lim.process(mix, lp, None)
-            self.lim_gr = self.master_lim.gr
-
-        mix *= mp["volume"]
-        self.master_vu = (float(np.max(np.abs(mix[0]))) if mix.size else 0.0,
-                          float(np.max(np.abs(mix[1]))) if mix.size else 0.0)
+        mix = self.graph.render(n, bpm)
+        native_status = self.graph.status()
+        self._native_status = native_status
+        slot_vu = native_status.get("slot_vu", [])
+        for idx, s in enumerate(self.slots):
+            s.vu = float(slot_vu[idx]) if idx < len(slot_vu) else 0.0
+        master_vu = native_status.get("master_vu", (0.0, 0.0))
+        self.master_vu = (float(master_vu[0]), float(master_vu[1]))
+        self.lim_gr = float(native_status.get("lim_gr", 0.0))
+        self._tail_blocks = 1 if native_status.get("has_tail") else 0
 
         # advance transport
         if t["playing"]:
@@ -716,76 +602,15 @@ class AudioEngine:
                 loop_end = loop[1] * BEATS_PER_MEASURE
                 if newpos >= loop_end and loop_end > loop_start:
                     newpos = loop_start + (newpos - loop_end)
-                    for s in self.slots:
-                        if s.engine:
-                            s.engine.all_off()
+                    for idx, s in enumerate(self.slots):
+                        self.graph.all_off(idx)
                         s.active_offs = []
             elif t["mode"] == "pattern":
                 pass   # patterns loop naturally by modulo
             self.pos = newpos
             t["pos"] = self.pos
 
-        np.clip(mix, -1.5, 1.5, out=mix)
         return mix
-
-    def _strip(self, s, x, mx):
-        out = x
-        # 3-band EQ (low shelf 250, peak 1200, high shelf 5000)
-        bands = (("lowshelf", 250.0, mx["eq_bass"]),
-                 ("peak", 1200.0, mx["eq_mid"]),
-                 ("highshelf", 5000.0, mx["eq_high"]))
-        for bi, (kind, f0, gain) in enumerate(bands):
-            if abs(gain) < 0.01:
-                continue
-            for c in range(2):
-                bq = s.eq[bi * 2 + c]
-                bq.set(kind, f0, 0.7, sr=self.sample_rate, gain_db=gain * 12.0)
-                out = out.copy() if out is x else out
-                out[c] = bq.process(out[c])
-        # width: micro-delay one channel
-        w = mx["width"]
-        if abs(w) > 0.02:
-            d = int(abs(w) * 0.008 * self.sample_rate)
-            if d > 0:
-                ch = 0 if w < 0 else 1
-                buf = s.width_buf[ch]
-                sig = out[ch]
-                out = out.copy() if out is x else out
-                if d >= len(sig):
-                    out[ch] = buf[-d:-d + len(sig)]
-                else:
-                    out[ch, :d] = buf[-d:]
-                    out[ch, d:] = sig[:-d]
-                if len(sig) >= len(buf):
-                    buf[:] = sig[-len(buf):]
-                else:
-                    buf[:-len(sig)] = buf[len(sig):]
-                    buf[-len(sig):] = sig
-        # pan
-        pan = mx["pan"]
-        if abs(pan) > 0.01:
-            gl = np.sqrt(0.5 * (1 - pan)) * 1.414
-            gr = np.sqrt(0.5 * (1 + pan)) * 1.414
-            out = out.copy() if out is x else out
-            out[0] *= gl
-            out[1] *= gr
-        return out
-
-    def _master_eq(self, x, mp):
-        bass_f = 60 + mp["eq_bass_freq"] * 440       # 60..500
-        mid_f = 500 + mp["eq_mid_freq"] * 4500       # 500..5000
-        bands = (("lowshelf", bass_f, mp["eq_bass"]),
-                 ("peak", np.sqrt(bass_f * mid_f), mp["eq_mid"]),
-                 ("highshelf", mid_f, mp["eq_high"]))
-        out = x
-        for bi, (kind, f0, gain) in enumerate(bands):
-            if abs(gain) < 0.01:
-                continue
-            for c in range(2):
-                bq = self.master_eq[bi * 2 + c]
-                bq.set(kind, f0, 0.7, sr=self.sample_rate, gain_db=gain * 12.0)
-                out[c] = bq.process(out[c])
-        return out
 
     # -- vu/status ------------------------------------------------------------
 
@@ -831,70 +656,18 @@ class AudioEngine:
               "audio": {"sample_rate": self.sample_rate,
                         "block_size": self.block_size},
               "auto": auto, "looper": looper}
+        vocoder_vu = self._native_status.get("vocoder_vu", {})
         for idx, m in enumerate(doc["machines"]):
-            if m and m["type"] == "vocoder" and self.slots[idx].engine:
+            if m and m["type"] == "vocoder" and str(idx) in vocoder_vu:
                 st.setdefault("vocoder_vu", {})[str(idx)] = [
-                    round(float(v), 3) for v in self.slots[idx].engine.band_vu]
+                    round(float(v), 3) for v in vocoder_vu[str(idx)]]
         return st
 
     def is_idle(self):
         doc = self.room.doc
         if doc["transport"]["playing"]:
             return False
-        return (self._tail_blocks <= 0 and
-                not any(s.engine and s.engine.active() for s in self.slots))
-
-
-class MasterDelay:
-    """Global multi-tap delay with per-tap pan and looping."""
-
-    def __init__(self, sample_rate):
-        self.sample_rate = sample_rate
-        self.buf = np.zeros((2, sample_rate * 4))
-        self.w = 0
-        self.lp = np.zeros(2)
-
-    def process(self, x, mp, bpm):
-        n = x.shape[1]
-        steps = int(mp["dly_steps"]) + 1
-        if mp["dly_sync"]:
-            opts = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0]
-            beats = opts[int(round(mp["dly_time"] * (len(opts) - 1)))]
-            D = beats * 60.0 / bpm * self.sample_rate
-        else:
-            D = (0.02 + mp["dly_time"] * 1.2) * self.sample_rate
-        D = int(np.clip(D, 64, self.buf.shape[1] // (steps + 1)))
-        fb = mp["dly_feedback"]
-        damp = mp["dly_damping"]
-        idx = (self.w + np.arange(n)) % self.buf.shape[1]
-        out = np.zeros_like(x)
-        pans = [mp["dly_pan1"], mp["dly_pan2"]]
-        write = x.copy()
-        if mp["dly_first_tap"]:
-            write *= fb
-        acc = np.zeros_like(x)
-        for tap in range(steps):
-            rd = (idx - D * (tap + 1)) % self.buf.shape[1]
-            tapL = self.buf[0, rd]
-            tapR = self.buf[1, rd]
-            g = fb ** tap
-            pan = pans[tap % 2]
-            gl = np.sqrt(0.5 * (1 - pan)) * 1.414
-            gr = np.sqrt(0.5 * (1 + pan)) * 1.414
-            out[0] += tapL * g * gl
-            out[1] += tapR * g * gr
-            if tap == steps - 1:
-                acc[0] = tapL * g
-                acc[1] = tapR * g
-        if damp > 0:
-            coef = damp * 0.9
-            for c in range(2):
-                out[c], self.lp[c] = onepole_smooth(out[c], coef, self.lp[c])
-        loop_in = acc * fb if mp["dly_loop"] else 0
-        self.buf[0, idx] = write[0] + (loop_in[0] if mp["dly_loop"] else 0)
-        self.buf[1, idx] = write[1] + (loop_in[1] if mp["dly_loop"] else 0)
-        self.w = (self.w + n) % self.buf.shape[1]
-        return out
+        return not self.graph.active()
 
 
 # ---------------------------------------------------------------------------
@@ -911,16 +684,12 @@ def render_song(room, loop_only=False):
     engine.room = room
     engine.sample_rate = sample_rate
     engine.block_size = block_size
-    engine.slots = [MachineSlot(sample_rate, block_size)
-                    for _ in range(len(doc["machines"]))]
-    engine.master_fx = [None, None]
-    engine.master_delay = MasterDelay(sample_rate)
-    engine.master_reverb = effects.Reverb(sample_rate=sample_rate)
-    engine.master_eq = [Biquad() for _ in range(6)]
-    engine.master_lim = effects.Limiter(sample_rate=sample_rate)
-    engine.prev_outputs = {}
+    engine.slots = [MachineSlot() for _ in range(len(doc["machines"]))]
+    engine.graph = synth.NativeRoomEngine(
+        sample_rate, block_size, len(engine.slots))
     engine.master_vu = (0.0, 0.0)
     engine.lim_gr = 0.0
+    engine._native_status = {}
     engine.auto_values = {}
     engine.live_recorded = {}
     engine.on_state_change = None

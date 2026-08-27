@@ -1,229 +1,162 @@
 # Refrag Sound Engine Architecture
 
-The Refrag audio system uses a native C++ core compiled as a Python extension 
-module named `refrag_engine`.
+Refrag renders audio in the native C++ `refrag_engine` extension. Each Python
+`AudioEngine` owns one persistent native room graph. Python manages
+collaboration, transport, sequencing, automation, asset loading, and streaming;
+C++ owns every operation that produces or transforms a rendered sample.
 
-The Python server selects machines, maintains room state, schedules notes, and 
-pushes block data to the browser. The native engine handles the hot path for
-audio synthesis and mixing.
+## Render flow
 
-## High-Level Data Flow
+For each block, the server:
 
-The main flow is:
-1. The server creates or updates machine objects for each rack slot.
-2. The transport loop requests audio blocks for the room see (`AudioEngine / synth.py`).
-3. The Python side prepares a float NumPy output buffer and param matrix.
-4. The native engine renders directly into those arrays.
-5. Audio is mixed and sent to connected browser clients.
+1. Reads room state while holding the room lock.
+2. Resolves transport events and automation values.
+3. Registers newly referenced sample assets with the native sample bank.
+4. Synchronizes machine, effect, mixer, routing, and master configuration.
+5. Submits note-on and note-off events with offsets within the block.
+6. Calls the native room graph once and receives the final planar stereo block.
+7. Uses native meter/status values and advances the Python transport clock.
 
-## Python Server Integration
-
-The server-side integration remains centered on the existing `server/synth.py` and `server/engine.py` modules.
-
-### Server responsibilities
-
-- maintain room state and machine definitions
-- decide which instruments are active for the current block
-- convert room data into a renderable parameter matrix
-- call the native rendering entry point
-- aggregate audio for the full room
-
-### Native module responsibilities
-
-- create machine instances from Python dict metadata
-- maintain voice state and per-machine parameters
-- render one block of samples into a provided buffer
-- expose audio data in a format the Python layer already understands
-
-The key API is:
-
-```python
-import refrag_engine
-
-refrag_engine.render_block(output_buffer, param_matrix)
-```
-
-and machine objects are created through:
-
-```python
-engine = refrag_engine.create_machine(machine_dict)
-```
-
-This lets the Python server keep using normal dictionaries and NumPy arrays while the native layer handles the density-critical sample work.
-
-## Component Relationship Diagram
+The real-time streaming loop and offline WAV export use this same path. Export
+does not have a separate Python DSP implementation.
 
 ```text
-+-----------------------+
-| server/engine.py      |
-| - render_block()      |
-| - handle_note()       |
-| - schedule automation |
-+----------+------------+
-           |
-           v
-+----------+------------+
-| server/synth.py        |
-| - create_machine()     |
-| - machine metadata     |
-| - native bridge        |
-+----------+------------+
-           |
-           v
-+----------+------------+
-| pybind11 C++ module    |
-| refrag_engine          |
-| - MachineEngine        |
-| - render_block()       |
-+----------+------------+
-           |
-           v
-+----------+------------+
-| Native DSP Core        |
-| - voice state          |
-| - oscillator graphs    |
-| - envelopes            |
-| - filter/mix stages    |
-+-----------------------+
-```
-
-## Native Engine Structure
-
-The native code creates a `MachineEngine` object for each runtime machine instance. Each machine owns:
-
-- a machine type (subsynth, bassline, padsynth, etc.)
-- a parameter block
-- a tracked set of active voices
-- phase state for oscillators and modulation
-- release/decay logic for note tails
-
-The render call path is intentionally narrow:
-
-```text
-render_block(output_buffer, param_matrix)
+room state / clients
         |
         v
-validate NumPy arrays
-        |
-        v
-iterate rows / instrument entries
-        |
-        v
-fill stereo output directly
-        |
-        v
-return to Python server
-```
-
-This is the path used to avoid layer-by-layer copying between Python and C++.
-
-## Zero-Copy Conventions
-
-The render path writes directly into the preallocated NumPy memory owned by the Python caller.
-
-- the output buffer is passed into the native routine as `py::array_t<float, py::array::c_style | py::array::forcecast>`
-- the native layer reads `output_buffer.mutable_data()`
-- samples are written directly to those memory addresses
-- no extra heap allocations or temporary arrays are created in the hot render path
-
-This keeps the host/device memory boundary narrow and avoids churn that would otherwise hurt real-time performance.
-
-## Worker Model and Thread Coordination
-
-The engine is designed around a fixed thread pool initialized once per process. Each worker thread lives for the application lifetime and waits on lightweight atomic signaling rather than mutex-based blocking.
-
-Core parts of the design:
-
-- fixed worker count based on hardware concurrency
-- dedicated task slots per worker
-- atomic-ready / atomic-done flags
-- spin-wait / atomic polling for the render loop
-- no standard mutex locking in the per-block render path
-
-```text
 +----------------------------+
-| Main Python / server thread |
-| render_block() request      |
+| Python AudioEngine         |
+| transport and sequencing   |
+| automation and note events |
+| sample asset registration  |
 +-------------+--------------+
               |
+              | graph state + timestamped events
               v
 +-------------+--------------+
-| Native render dispatcher    |
-| split work across workers   |
-| arm atomic task slots       |
+| Native RoomEngine          |
+| machine voices             |
+| insert effects             |
+| mixer strips and routing   |
+| sends and master chain     |
 +-------------+--------------+
               |
+              | final stereo float block + meters
               v
-+-----------------------------+
-| Worker threads              |
-| - fetch assigned voices     |
-| - render per machine state  |
-| - write scratch channel     |
-| - signal completion         |
-+--------------+--------------+
-               |
-               v
-+--------------+---------------+
-| Main thread                  |
-| aggregate scratch buffers    |
-| write final stereo mix       |
-+------------------------------+
+ streaming PCM / WAV export
 ```
 
-The design intentionally favors deterministic real-time execution over flexible task scheduling. The goal is to keep the audio callback path static, small, and safe for live performance.
+## Native graph ownership
 
-## Synthesis Core and Voice Model
+The room graph persists for the lifetime of an audio configuration and owns:
 
-The native engine uses a compact value-based voice model. Each voice contains its own incremental oscillator phase, envelope state, start offset, and note lifecycle markers.
+- all 11 machine implementations and their voices;
+- the native sample bank and sample-playback cursors;
+- two insert-effect instances per rack slot;
+- channel EQ, width history, pan, volume, mute/solo, and send levels;
+- dry-output, processed-line, previous-block, delay-send, and reverb-send buses;
+- master delay, reverb, inserts, EQ, limiter, volume, and clipping;
+- effect and send tails, VU meters, limiter gain reduction, and Vocoder bands.
 
-This keeps the internal DSP graph compact and cache-friendly:
+Compatible state survives graph synchronization. Replacing a machine or effect
+resets only the corresponding native runtime object. Changing sample rate or
+block size creates a new graph because delay lines, filters, and time constants
+depend on those values.
 
-- each voice is a small object
-- its state is passed by value in the local render work
-- phase and filter state remain independent between voices and threads
-- synthesis kernels operate on fixed, preallocated state rather than dynamically resized containers
+## Samples
 
-For example, the engine tracks:
+WAV decoding, uploads, and procedural factory-sample creation remain Python
+asset utilities. Before a referenced BeatBox, PCMSynth, or Vocoder sample can
+render, Python passes a contiguous mono float buffer and its source sample rate
+to the native sample bank. C++ retains render-safe storage and performs all
+playback, interpolation, pitch conversion, looping, envelopes, and filtering.
 
-- note frequency / pitch
-- amplitude envelope
-- pan and output gain
-- per-voice sample generation state
-- release tail state for note-off processing
+Sample arrays never cross the Python boundary once per block. Registration only
+occurs when a graph first references an asset.
 
-## Parameter Flow
+## Routing order
 
-The parameter matrix is read at render time, so parameter changes do not require recompiling synthesis graphs.
+The native graph preserves rack ordering and state from block to block:
 
-Each block reads values such as:
+1. machine dry outputs are rendered;
+2. a Vocoder can read an available machine output, with previous-block data
+   retained for ordering-dependent routes;
+3. each slot's two inserts process in order;
+4. the mixer strip applies EQ, stereo width, and pan;
+5. processed lines are available to compressor sidechains;
+6. audible channels feed the main, delay-send, and reverb-send buses;
+7. master sends, inserts, EQ, limiter, volume, and clipping produce the result.
 
-- frequency / note data
-- cutoff / resonance
-- volume / gain
-- wave shape and algorithm selections
-- modulator values and detune controls
+Stateful processors continue receiving blocks after notes end so delay, reverb,
+filter, and dynamics tails decay correctly. Native active/tail state determines
+when an idle room can stop rendering.
 
-This means runtime edits can flow from the room state into the DSP without rebuilding static graphs.
+## Python/native boundary
 
-## Why This Fits Refrag
+The extension exposes a persistent room engine with operations for:
 
-Refrag is a collaborative rack-based DAW with multiple simultaneous instruments, automation, and transport-driven block generation. The new engine fits that model because it keeps the server-side orchestration logic intact while moving the heavy audio work into a compact and predictable native code path.
+- graph synchronization;
+- sample registration;
+- slot-addressed note events and all-off/kill operations;
+- one-call final block rendering;
+- active/tail queries and meter snapshots.
 
-The main benefits are:
+The boundary validates dictionary fields and NumPy sample buffers before native
+DSP begins. The render routine does not access Python objects while processing
+samples and releases the GIL for the native hot path.
 
-- faster low-level synthesis than Python loops
-- lower per-block overhead in the audio path
-- better fit for multi-machine live performance
-- consistent interaction with NumPy-based Python data structures
-- maintainability through a narrower boundary between orchestration and DSP
+Each room graph creates a persistent native worker pool, capped by both the
+configured render-thread count and the rack size. Independent non-Vocoder
+machines render in parallel; Vocoders then render in rack order so current- and
+previous-block modulator routing remains deterministic. Insert chains,
+sidechains, mixing, sends, and mastering retain their required serial order.
+Workers are created with the graph and reused for every block--no threads are
+created in the hot path. Each graph selects its worker count from available
+hardware concurrency and caps it to useful rack work.
 
-## Summary
+`refrag_engine.create_room_engine(...)` is the only supported Python render
+entry point. Machines, effects, samples, routing, and master processing are
+configured through that persistent graph; standalone machine/effect renderers
+and single-shot block helpers are intentionally not exposed.
 
-The new sound engine is a hybrid architecture:
+Python may continue using NumPy/SciPy for non-render tasks such as sample asset
+creation, AI-assisted analysis, test fixture generation, and final float-to-PCM
+encoding. Machine synthesis, effects, channel processing, sends, mixing, and
+mastering must not have Python fallbacks.
 
-- the Python server still owns room state, scheduling, and UI integration
-- the native C++ module owns the hot render loop and voice synthesis
-- pybind11 bridges Python and C++ without losing the direct NumPy memory model
-- the fixed worker pool and atomic signaling keep the render path low-latency and allocation-free
+## Audio configuration and determinism
 
-This gives Refrag a more efficient, more scalable synthesis core without sacrificing the existing collaborative server architecture.
+Sample rate and block size are native engine instance properties. Oscillator
+increments, envelopes, filters, delay lengths, sample-rate conversion, and
+effect timing derive from the configured rate rather than a fixed 44.1 kHz
+constant.
+
+Each stateful processor owns its own deterministic state. Noise-based machines
+and effects use per-instance native generators so tests and offline rendering
+are reproducible. Cross-slot dependencies are processed in a defined order;
+parallel work is limited to independent operations that cannot change routing
+or state order.
+
+## Development requirements
+
+The native extension must be rebuilt and reinstalled after any change under
+`native/` so that tests never run against a stale binary:
+
+```sh
+python -m pip install .
+```
+
+Changes to render behavior should include graph-level tests for the relevant
+machine or effect and for state continuity across blocks. The complete test
+suite is:
+
+```sh
+python -m unittest discover -s tests -v
+python native/tests/test_native_engine.py
+```
+
+Factory presets, non-default sample rates and block sizes, live and scheduled
+notes, routing, tails, meters, streaming, and offline export are all expected to
+exercise the native graph. A structural regression test ensures Python makes
+one native room render call per output block and performs no intermediate
+machine/effect/mixer NumPy processing.

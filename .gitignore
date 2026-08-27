@@ -1,3 +1,5 @@
 data/tls/
 server/__pycache__/
 tests/__pycache__/
+native/build/
+native/tests/__pycache__/

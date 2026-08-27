@@ -12,8 +12,9 @@ import wave
 
 import numpy as np
 
-from .dsp import SR
-from .state import SAMPLE_DIR
+from .state import AUDIO_DEFAULT_SAMPLE_RATE, SAMPLE_DIR
+
+SR = AUDIO_DEFAULT_SAMPLE_RATE
 
 _rng = np.random.default_rng(42)
 _cache = {}
