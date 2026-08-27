@@ -1,0 +1,16 @@
+{
+ "type": "bassline",
+ "params": {
+  "wave": 1,
+  "pulse_width": 0.45,
+  "tune": 12,
+  "cutoff": 0.6,
+  "res": 0.5,
+  "env_mod": 0.4,
+  "decay": 0.45,
+  "dist_program": 4,
+  "dist_pre": 1.4,
+  "dist_amount": 0.5,
+  "dist_post": 0.7
+ }
+}

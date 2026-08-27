@@ -1,0 +1,8 @@
+{
+ "type": "bitsynth",
+ "params": {
+  "blend": 0.0
+ },
+ "expr_a": "t*(42&t>>10)",
+ "expr_b": "(t>>4)|(t<<2)"
+}

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Refrag</title>
+<link rel="stylesheet" href="/web/style.css">
+</head>
+<body>
+<div id="app">
+  <div id="rackbar"></div>
+  <div id="machineview"></div>
+  <div id="controlpanel">
+    <button id="btn-mgmt" class="cp-btn" title="Machine management">&#9638;</button>
+    <button id="btn-menu" class="cp-btn" title="App menu">&#9776;</button>
+    <div id="cp-lcd">
+      <div id="cp-song">untitled</div>
+      <div id="cp-pos">1.1.1</div>
+    </div>
+    <button id="btn-mode" class="cp-mode">PATTERN</button>
+    <div id="cp-users" title="Connected users">&#128101; 1</div>
+    <div id="cp-drop" title="Render overruns">XRUN 0</div>
+    <button id="btn-audio" class="cp-btn" title="Enable audio">&#128266;</button>
+    <div class="cp-transport">
+      <button id="btn-play" class="cp-btn play" title="Play">&#9654;</button>
+      <button id="btn-stop" class="cp-btn stop" title="Stop">&#9632;</button>
+      <button id="btn-rec" class="cp-btn rec" title="Record">&#9679;</button>
+    </div>
+  </div>
+</div>
+<div id="modal-root"></div>
+<div id="rec-outline"></div>
+<script src="/web/js/util.js"></script>
+<script src="/web/js/audio.js"></script>
+<script src="/web/tools/subsynth.js"></script>
+<script src="/web/tools/pcmsynth.js"></script>
+<script src="/web/tools/bassline.js"></script>
+<script src="/web/tools/beatbox.js"></script>
+<script src="/web/tools/padsynth.js"></script>
+<script src="/web/tools/bitsynth.js"></script>
+<script src="/web/tools/modular.js"></script>
+<script src="/web/tools/organ.js"></script>
+<script src="/web/tools/vocoder.js"></script>
+<script src="/web/tools/fmsynth.js"></script>
+<script src="/web/tools/kssynth.js"></script>
+<script src="/web/js/machines.js"></script>
+<script src="/web/js/editors.js"></script>
+<script src="/web/js/aimatch.js"></script>
+<script src="/web/js/mixer.js"></script>
+<script src="/web/js/looper.js"></script>
+<script src="/web/js/app.js"></script>
+</body>
+</html>

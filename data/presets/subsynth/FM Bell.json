@@ -1,0 +1,15 @@
+{
+ "type": "subsynth",
+ "params": {
+  "osc1_wave": 0,
+  "osc2_wave": 1,
+  "osc_mod": 0.45,
+  "mod_mode": 0,
+  "osc2_octave": 2,
+  "osc2_semis": 7,
+  "flt_type": 0,
+  "vol_decay": 0.7,
+  "vol_sustain": 0.0,
+  "vol_release": 0.6
+ }
+}

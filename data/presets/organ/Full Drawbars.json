@@ -1,0 +1,16 @@
+{
+ "type": "organ",
+ "params": {
+  "bar16": 0.9,
+  "bar5_13": 0.7,
+  "bar8": 0.9,
+  "bar4": 0.75,
+  "bar2_23": 0.6,
+  "bar2": 0.55,
+  "bar1_35": 0.4,
+  "bar1_13": 0.35,
+  "bar1": 0.3,
+  "leslie_speed": 0.45,
+  "leslie_depth": 0.55
+ }
+}

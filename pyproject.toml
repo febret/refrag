@@ -1,0 +1,17 @@
+[build-system]
+requires = [
+  "scikit-build-core>=0.11",
+  "pybind11>=2.13",
+  "cmake>=3.28",
+  "ninja>=1.11",
+]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "refrag"
+version = "0.0.0"
+description = "Refrag collaborative audio engine"
+requires-python = ">=3.11"
+
+[tool.scikit-build]
+build.verbose = true

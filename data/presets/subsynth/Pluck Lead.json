@@ -1,0 +1,17 @@
+{
+ "type": "subsynth",
+ "params": {
+  "osc1_wave": 4,
+  "osc2_wave": 3,
+  "osc_mix": 0.4,
+  "osc2_semis": 12,
+  "flt_type": 1,
+  "flt_cutoff": 0.5,
+  "flt_res": 0.45,
+  "flt_decay": 0.28,
+  "flt_sustain": 0.1,
+  "vol_decay": 0.45,
+  "vol_sustain": 0.0,
+  "vol_release": 0.25
+ }
+}

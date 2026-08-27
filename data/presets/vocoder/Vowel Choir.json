@@ -1,0 +1,39 @@
+{
+ "type": "vocoder",
+ "params": {
+  "wave": 0,
+  "unison": 0.35,
+  "sub": 0.4,
+  "noise": 0.03,
+  "slew": 0.5,
+  "hf_bypass": 0.1,
+  "band1": 0.8,
+  "band8": 1.3
+ },
+ "modulators": [
+  {
+   "source": "vox_vowels",
+   "machine": -1
+  },
+  {
+   "source": "vox_robot",
+   "machine": -1
+  },
+  {
+   "source": "",
+   "machine": -1
+  },
+  {
+   "source": "",
+   "machine": -1
+  },
+  {
+   "source": "",
+   "machine": -1
+  },
+  {
+   "source": "",
+   "machine": -1
+  }
+ ]
+}

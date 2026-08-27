@@ -1,0 +1,18 @@
+{
+ "type": "fmsynth",
+ "params": {
+  "algorithm": 0,
+  "op1_level": 0.5,
+  "op1_octave": 2,
+  "op1_semis": 5,
+  "op1_decay": 0.5,
+  "op1_sustain": 0.0,
+  "op2_level": 0.6,
+  "op2_decay": 0.6,
+  "op2_sustain": 0.0,
+  "op3_level": 0.9,
+  "op3_decay": 0.75,
+  "op3_sustain": 0.0,
+  "op3_release": 0.6
+ }
+}

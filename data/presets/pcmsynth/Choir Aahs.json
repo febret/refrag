@@ -1,0 +1,23 @@
+{
+ "type": "pcmsynth",
+ "params": {
+  "vol_attack": 0.35,
+  "vol_release": 0.5,
+  "flt_type": 1,
+  "flt_cutoff": 0.7
+ },
+ "samples": [
+  {
+   "sample": "choir",
+   "level": 1.0,
+   "tune": 0,
+   "pan": 0.0,
+   "root": 60,
+   "low": 0,
+   "high": 127,
+   "mode": 2,
+   "start": 0.3,
+   "end": 0.9
+  }
+ ]
+}

@@ -1,0 +1,69 @@
+{
+ "type": "modular",
+ "params": {},
+ "components": [
+  {
+   "type": "noise",
+   "params": {
+    "color": 0.2
+   }
+  },
+  {
+   "type": "lfo",
+   "params": {
+    "wave": 1,
+    "rate": 0.4,
+    "depth": 0.5
+   }
+  },
+  {
+   "type": "filter",
+   "params": {
+    "type": 2,
+    "cutoff": 0.4,
+    "reso": 0.7,
+    "mod_amt": 0.9
+   }
+  },
+  "occupied",
+  {
+   "type": "envelope",
+   "params": {
+    "attack": 0.5,
+    "decay": 0.5,
+    "sustain": 0.8,
+    "release": 0.6
+   }
+  },
+  {
+   "type": "vca",
+   "params": {
+    "gain": 0.9
+   }
+  },
+  null,
+  null
+ ],
+ "wires": [
+  [
+   "c0.out",
+   "c2.in"
+  ],
+  [
+   "c1.out",
+   "c2.mod"
+  ],
+  [
+   "c2.out",
+   "c5.in"
+  ],
+  [
+   "c4.out",
+   "c5.mod"
+  ],
+  [
+   "c5.out",
+   "panel.left_out"
+  ]
+ ]
+}

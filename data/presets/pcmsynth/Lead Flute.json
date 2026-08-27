@@ -1,0 +1,24 @@
+{
+ "type": "pcmsynth",
+ "params": {
+  "vol_attack": 0.12,
+  "vol_release": 0.25,
+  "lfo_target": 1,
+  "lfo_rate": 5.0,
+  "lfo_depth": 0.02
+ },
+ "samples": [
+  {
+   "sample": "flute",
+   "level": 1.0,
+   "tune": 0,
+   "pan": 0.0,
+   "root": 72,
+   "low": 0,
+   "high": 127,
+   "mode": 2,
+   "start": 0.35,
+   "end": 0.9
+  }
+ ]
+}

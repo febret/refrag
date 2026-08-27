@@ -1,0 +1,65 @@
+{
+ "type": "modular",
+ "params": {},
+ "components": [
+  {
+   "type": "oscillator",
+   "params": {
+    "wave": 1,
+    "octave": 0,
+    "semis": 0,
+    "cents": 0,
+    "fm_amt": 0
+   }
+  },
+  "occupied",
+  {
+   "type": "envelope",
+   "params": {
+    "attack": 0.0,
+    "decay": 0.45,
+    "sustain": 0.0,
+    "release": 0.2
+   }
+  },
+  {
+   "type": "vca",
+   "params": {
+    "gain": 1.0
+   }
+  },
+  {
+   "type": "moddelay",
+   "params": {
+    "time": 0.4,
+    "feedback": 0.45,
+    "wet": 0.5
+   }
+  },
+  null,
+  null,
+  null
+ ],
+ "wires": [
+  [
+   "panel.note_cv",
+   "c0.note"
+  ],
+  [
+   "c0.out",
+   "c3.in"
+  ],
+  [
+   "c2.out",
+   "c3.mod"
+  ],
+  [
+   "c3.out",
+   "c4.in"
+  ],
+  [
+   "c4.out",
+   "panel.left_out"
+  ]
+ ]
+}

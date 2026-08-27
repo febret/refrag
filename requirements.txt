@@ -1,0 +1,5 @@
+aiohttp>=3.9
+cryptography>=42.0
+numpy>=1.26
+scipy>=1.11
+onnxruntime>=1.19

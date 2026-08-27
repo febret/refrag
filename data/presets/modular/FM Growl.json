@@ -1,0 +1,81 @@
+{
+ "type": "modular",
+ "params": {},
+ "components": [
+  {
+   "type": "oscillator",
+   "params": {
+    "wave": 0,
+    "octave": -1,
+    "semis": 0,
+    "cents": 0,
+    "fm_amt": 0
+   }
+  },
+  "occupied",
+  {
+   "type": "oscillator",
+   "params": {
+    "wave": 0,
+    "octave": 0,
+    "semis": 7,
+    "cents": 0,
+    "fm_amt": 0.5
+   }
+  },
+  "occupied",
+  {
+   "type": "envelope",
+   "params": {
+    "attack": 0.01,
+    "decay": 0.4,
+    "sustain": 0.6,
+    "release": 0.2
+   }
+  },
+  {
+   "type": "vca",
+   "params": {
+    "gain": 1.0
+   }
+  },
+  {
+   "type": "shaper",
+   "params": {
+    "drive": 0.35,
+    "mode": 0
+   }
+  },
+  null
+ ],
+ "wires": [
+  [
+   "panel.note_cv",
+   "c0.note"
+  ],
+  [
+   "panel.note_cv",
+   "c2.note"
+  ],
+  [
+   "c0.out",
+   "c2.fm"
+  ],
+  [
+   "c2.out",
+   "c5.in"
+  ],
+  [
+   "c4.out",
+   "c5.mod"
+  ],
+  [
+   "c5.out",
+   "c6.in"
+  ],
+  [
+   "c6.out",
+   "panel.left_out"
+  ]
+ ]
+}

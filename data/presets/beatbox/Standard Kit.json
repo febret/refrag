@@ -1,0 +1,110 @@
+{
+ "type": "beatbox",
+ "params": {},
+ "channels": [
+  {
+   "sample": "kick",
+   "params": {
+    "tune": 0,
+    "punch": 0,
+    "decay": 1,
+    "pan": 0.0,
+    "volume": 1.1
+   },
+   "mute": 0,
+   "solo": 0,
+   "mute_group": 0
+  },
+  {
+   "sample": "snare",
+   "params": {
+    "tune": 0,
+    "punch": 0,
+    "decay": 1,
+    "pan": 0.0,
+    "volume": 0.95
+   },
+   "mute": 0,
+   "solo": 0,
+   "mute_group": 0
+  },
+  {
+   "sample": "clhat",
+   "params": {
+    "tune": 0,
+    "punch": 0,
+    "decay": 1,
+    "pan": -0.25,
+    "volume": 0.75
+   },
+   "mute": 0,
+   "solo": 0,
+   "mute_group": 1
+  },
+  {
+   "sample": "ophat",
+   "params": {
+    "tune": 0,
+    "punch": 0,
+    "decay": 1,
+    "pan": 0.25,
+    "volume": 0.7
+   },
+   "mute": 0,
+   "solo": 0,
+   "mute_group": 1
+  },
+  {
+   "sample": "clap",
+   "params": {
+    "tune": 0,
+    "punch": 0,
+    "decay": 1,
+    "pan": 0.1,
+    "volume": 0.85
+   },
+   "mute": 0,
+   "solo": 0,
+   "mute_group": 0
+  },
+  {
+   "sample": "tom_lo",
+   "params": {
+    "tune": 0,
+    "punch": 0,
+    "decay": 1,
+    "pan": -0.35,
+    "volume": 0.85
+   },
+   "mute": 0,
+   "solo": 0,
+   "mute_group": 0
+  },
+  {
+   "sample": "tom_hi",
+   "params": {
+    "tune": 0,
+    "punch": 0,
+    "decay": 1,
+    "pan": 0.35,
+    "volume": 0.85
+   },
+   "mute": 0,
+   "solo": 0,
+   "mute_group": 0
+  },
+  {
+   "sample": "crash",
+   "params": {
+    "tune": 0,
+    "punch": 0,
+    "decay": 1,
+    "pan": 0.0,
+    "volume": 0.7
+   },
+   "mute": 0,
+   "solo": 0,
+   "mute_group": 0
+  }
+ ]
+}

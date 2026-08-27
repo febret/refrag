@@ -1,0 +1,13 @@
+{
+ "type": "bassline",
+ "params": {
+  "wave": 0,
+  "cutoff": 0.5,
+  "res": 0.55,
+  "env_mod": 0.5,
+  "decay": 0.2,
+  "lfo_target": 1,
+  "lfo_rate": 6.0,
+  "lfo_depth": 0.12
+ }
+}

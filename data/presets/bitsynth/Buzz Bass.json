@@ -1,0 +1,9 @@
+{
+ "type": "bitsynth",
+ "params": {
+  "blend": 0.5,
+  "octave": -2
+ },
+ "expr_a": "t*3&(t>>6)",
+ "expr_b": "t*2&(t>>5)|t*3&(t*4>>10)"
+}

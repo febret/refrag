@@ -1,0 +1,21 @@
+{
+ "type": "fmsynth",
+ "params": {
+  "algorithm": 0,
+  "feedback": 0.6,
+  "op1_level": 0.9,
+  "op1_octave": -2,
+  "op1_fixed": 1,
+  "op1_attack": 0.5,
+  "op1_sustain": 1.0,
+  "op2_level": 0.7,
+  "op2_decay": 0.7,
+  "op2_sustain": 0.5,
+  "op3_level": 0.8,
+  "op3_sustain": 0.8,
+  "op3_release": 0.5,
+  "lfo_f3": 1,
+  "lfo_rate": 0.4,
+  "lfo_depth": 0.25
+ }
+}

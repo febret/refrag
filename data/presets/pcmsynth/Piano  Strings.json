@@ -1,0 +1,32 @@
+{
+ "type": "pcmsynth",
+ "params": {
+  "vol_release": 0.3
+ },
+ "samples": [
+  {
+   "sample": "piano",
+   "level": 0.9,
+   "tune": 0,
+   "pan": -0.2,
+   "root": 60,
+   "low": 0,
+   "high": 63,
+   "mode": 0,
+   "start": 0.0,
+   "end": 1.0
+  },
+  {
+   "sample": "strings",
+   "level": 0.8,
+   "tune": 0,
+   "pan": 0.2,
+   "root": 60,
+   "low": 64,
+   "high": 127,
+   "mode": 2,
+   "start": 0.35,
+   "end": 0.9
+  }
+ ]
+}

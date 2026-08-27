@@ -1,0 +1,8 @@
+{
+ "type": "bitsynth",
+ "params": {
+  "blend": 0.25
+ },
+ "expr_a": "t*(t^t+(t%255|t+t)>>10|t>>6)",
+ "expr_b": "(t*9&t>>4)|(t*5&t>>7)"
+}

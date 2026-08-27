@@ -1,0 +1,10 @@
+{
+ "type": "kssynth",
+ "params": {
+  "pre_filter": 0.55,
+  "decay": 0.2,
+  "u1_damping": 0.6,
+  "u2_damping": 0.7,
+  "mix": 0.35
+ }
+}
