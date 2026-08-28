@@ -1,4 +1,6 @@
 # Refrag - Web-based multi-user Music Studio
+![Banner](./doc/banner2.png)
+
 Refrag is a collaborative, rack-based virtual DAW inspired by Caustic 3.1. 
 
 Sound is synthesized by a native C++ audio engine on the server and streamed to every
