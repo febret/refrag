@@ -1,18 +1,16 @@
-# Refrag - Web-based multi-user Caustic Sound Studio
+# Refrag - Web-based multi-user Music Studio
+Refrag is a collaborative, rack-based virtual DAW inspired by Caustic 3.1. 
 
-Refrag is a collaborative, rack-based virtual DAW inspired by Caustic 3.1. Sound
-is synthesized by a native C++ audio engine on the server and streamed to every
+Sound is synthesized by a native C++ audio engine on the server and streamed to every
 browser in a shared room. Machine controls, patterns, transport, mixer state,
 effects, and automation are synchronized over WebSockets and persisted as room
 snapshots.
 
-Refrag includes all 11 Caustic sound-machine families, all 16 insert effects,
-a 14-machine rack, two effects slots per channel, mixer, master section,
-pattern/song sequencer, automation capture, 70 factory starter presets,
-preset storage, and server-side WAV export.
+This project is also a playground for **low-latency, multicore C++ optimization**:
+Refrag uses a native synthesis engine with no dependencies on third party DSP 
+libraries or toolkits.
 
 ## Quick start
-
 Python 3.11 or newer is recommended.
 
 ```sh
