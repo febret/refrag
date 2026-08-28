@@ -336,3 +336,19 @@ function confirmBox(title, text, onOk) {
     { label: "OK", primary: true, onClick: onOk },
   ]);
 }
+
+/* Brief non-blocking notification (e.g. save confirmation, errors). */
+function showToast(text, isError = false) {
+  let root = document.getElementById("toast-root");
+  if (!root) {
+    root = el("div", "", document.body);
+    root.id = "toast-root";
+  }
+  const t = el("div", "toast" + (isError ? " error" : ""), root);
+  t.textContent = text;
+  setTimeout(() => t.classList.add("show"), 10);
+  setTimeout(() => {
+    t.classList.remove("show");
+    setTimeout(() => t.remove(), 300);
+  }, 2500);
+}

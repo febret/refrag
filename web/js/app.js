@@ -46,6 +46,12 @@ function connectWS() {
       document.getElementById("cp-users").innerHTML = "&#128101; " + msg.count;
     } else if (msg.type === "note") {
       flashRemoteNote(msg.slot, msg.note, msg.on);
+    } else if (msg.type === "saved") {
+      showToast("Song saved");
+    } else if (msg.type === "loaded") {
+      showToast(`Loaded "${msg.song}"`);
+    } else if (msg.type === "error") {
+      showToast(msg.message || "Error", true);
     }
   };
   ws.onclose = () => setTimeout(connectWS, 1500);
