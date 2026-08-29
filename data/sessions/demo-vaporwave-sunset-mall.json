@@ -1,0 +1,1387 @@
+{
+  "version": 1,
+  "name": "Demo - Vaporwave Sunset Mall",
+  "bpm": 82,
+  "shuffle_mode": 0,
+  "shuffle": 0.08,
+  "machines": [
+    {
+      "type": "pcmsynth",
+      "name": "Mall E-Piano",
+      "params": {
+        "flt_type": 1,
+        "flt_cutoff": 0.75,
+        "flt_res": 0.0,
+        "flt_attack": 0.0,
+        "flt_decay": 0.0,
+        "flt_sustain": 1.0,
+        "flt_release": 0.0,
+        "lfo_target": 0,
+        "lfo_wave": 0,
+        "lfo_rate": 2.0,
+        "lfo_depth": 0.0,
+        "octave": 0,
+        "semis": 0,
+        "cents": 0,
+        "vol_attack": 0.0,
+        "vol_decay": 0.0,
+        "vol_sustain": 1.0,
+        "vol_release": 0.2,
+        "cut_note": 0,
+        "volume": 1.0
+      },
+      "poly": 8,
+      "mute": 0,
+      "solo": 0,
+      "octave": 4,
+      "bank": 0,
+      "pattern": 0,
+      "transpose": 0,
+      "transpose_steps": [
+        {
+          "transpose": 0,
+          "loops": 1
+        },
+        {
+          "transpose": 0,
+          "loops": 1
+        },
+        {
+          "transpose": 0,
+          "loops": 1
+        },
+        {
+          "transpose": 0,
+          "loops": 1
+        }
+      ],
+      "looper_bank": 0,
+      "looper_mode": "queue",
+      "patterns": {
+        "A1": {
+          "length": 4,
+          "notes": [
+            [
+              53,
+              0,
+              3.6,
+              0.58,
+              0
+            ],
+            [
+              57,
+              0,
+              3.6,
+              0.58,
+              0
+            ],
+            [
+              60,
+              0,
+              3.6,
+              0.58,
+              0
+            ],
+            [
+              64,
+              0,
+              3.6,
+              0.58,
+              0
+            ],
+            [
+              48,
+              4,
+              3.6,
+              0.58,
+              0
+            ],
+            [
+              52,
+              4,
+              3.6,
+              0.58,
+              0
+            ],
+            [
+              55,
+              4,
+              3.6,
+              0.58,
+              0
+            ],
+            [
+              59,
+              4,
+              3.6,
+              0.58,
+              0
+            ],
+            [
+              56,
+              8,
+              3.6,
+              0.58,
+              0
+            ],
+            [
+              60,
+              8,
+              3.6,
+              0.58,
+              0
+            ],
+            [
+              63,
+              8,
+              3.6,
+              0.58,
+              0
+            ],
+            [
+              67,
+              8,
+              3.6,
+              0.58,
+              0
+            ],
+            [
+              51,
+              12,
+              3.6,
+              0.58,
+              0
+            ],
+            [
+              55,
+              12,
+              3.6,
+              0.58,
+              0
+            ],
+            [
+              58,
+              12,
+              3.6,
+              0.58,
+              0
+            ],
+            [
+              62,
+              12,
+              3.6,
+              0.58,
+              0
+            ]
+          ]
+        },
+        "A2": {
+          "length": 4,
+          "notes": [
+            [
+              53,
+              0,
+              3.75,
+              0.52,
+              0
+            ],
+            [
+              57,
+              0,
+              3.75,
+              0.52,
+              0
+            ],
+            [
+              60,
+              0,
+              3.75,
+              0.52,
+              0
+            ],
+            [
+              63,
+              0,
+              3.75,
+              0.52,
+              0
+            ],
+            [
+              55,
+              4,
+              3.75,
+              0.52,
+              0
+            ],
+            [
+              59,
+              4,
+              3.75,
+              0.52,
+              0
+            ],
+            [
+              62,
+              4,
+              3.75,
+              0.52,
+              0
+            ],
+            [
+              65,
+              4,
+              3.75,
+              0.52,
+              0
+            ],
+            [
+              56,
+              8,
+              3.75,
+              0.52,
+              0
+            ],
+            [
+              60,
+              8,
+              3.75,
+              0.52,
+              0
+            ],
+            [
+              63,
+              8,
+              3.75,
+              0.52,
+              0
+            ],
+            [
+              66,
+              8,
+              3.75,
+              0.52,
+              0
+            ],
+            [
+              51,
+              12,
+              3.75,
+              0.52,
+              0
+            ],
+            [
+              55,
+              12,
+              3.75,
+              0.52,
+              0
+            ],
+            [
+              58,
+              12,
+              3.75,
+              0.52,
+              0
+            ],
+            [
+              61,
+              12,
+              3.75,
+              0.52,
+              0
+            ]
+          ]
+        }
+      },
+      "effects": [
+        {
+          "type": "chorus",
+          "params": {
+            "depth": 0.42,
+            "rate": 0.18,
+            "delay": 0.36,
+            "wet": 0.36,
+            "mode": 1
+          },
+          "bypass": 0
+        },
+        {
+          "type": "vinyl",
+          "params": {
+            "dust": 0.08,
+            "scratch": 0.03,
+            "noise": 0.06,
+            "age": 0.28,
+            "wet": 0.2
+          },
+          "bypass": 0
+        }
+      ],
+      "mixer": {
+        "eq_bass": -0.08,
+        "eq_mid": 0.08,
+        "eq_high": -0.08,
+        "send_delay": 0.24,
+        "send_reverb": 0.36,
+        "pan": -0.12,
+        "width": 0.68,
+        "volume": 0.55
+      },
+      "preset": "Soft E-Piano",
+      "samples": [
+        {
+          "sample": "epiano",
+          "level": 1.0,
+          "tune": 0,
+          "pan": 0.0,
+          "root": 60,
+          "low": 0,
+          "high": 127,
+          "mode": 0,
+          "start": 0.0,
+          "end": 1.0
+        }
+      ],
+      "sample_sel": 0
+    },
+    {
+      "type": "padsynth",
+      "name": "Atrium Choir",
+      "params": {
+        "lfo1_target": 3,
+        "lfo1_rate": 0.3,
+        "lfo1_depth": 0.15,
+        "lfo1_phase": 0.0,
+        "lfo2_target": 0,
+        "lfo2_rate": 2.0,
+        "lfo2_depth": 0.0,
+        "lfo2_phase": 0.0,
+        "morph": 0.3,
+        "morph_env": 0,
+        "morph_attack": 0.2,
+        "morph_decay": 0.2,
+        "morph_sustain": 1.0,
+        "morph_release": 0.2,
+        "gain1": 1.0,
+        "gain2": 1.0,
+        "vol_attack": 0.45,
+        "vol_decay": 0.3,
+        "vol_sustain": 1.0,
+        "vol_release": 0.6,
+        "cut_note": 0,
+        "volume": 1.0
+      },
+      "poly": 8,
+      "mute": 0,
+      "solo": 0,
+      "octave": 4,
+      "bank": 0,
+      "pattern": 0,
+      "transpose": 0,
+      "transpose_steps": [
+        {
+          "transpose": 0,
+          "loops": 1
+        },
+        {
+          "transpose": 0,
+          "loops": 1
+        },
+        {
+          "transpose": 0,
+          "loops": 1
+        },
+        {
+          "transpose": 0,
+          "loops": 1
+        }
+      ],
+      "looper_bank": 0,
+      "looper_mode": "queue",
+      "patterns": {
+        "A1": {
+          "length": 4,
+          "notes": [
+            [
+              41,
+              0,
+              3.95,
+              0.46,
+              0
+            ],
+            [
+              48,
+              0,
+              3.95,
+              0.46,
+              0
+            ],
+            [
+              53,
+              0,
+              3.95,
+              0.46,
+              0
+            ],
+            [
+              57,
+              0,
+              3.95,
+              0.46,
+              0
+            ],
+            [
+              36,
+              4,
+              3.95,
+              0.46,
+              0
+            ],
+            [
+              43,
+              4,
+              3.95,
+              0.46,
+              0
+            ],
+            [
+              48,
+              4,
+              3.95,
+              0.46,
+              0
+            ],
+            [
+              52,
+              4,
+              3.95,
+              0.46,
+              0
+            ],
+            [
+              44,
+              8,
+              3.95,
+              0.46,
+              0
+            ],
+            [
+              51,
+              8,
+              3.95,
+              0.46,
+              0
+            ],
+            [
+              56,
+              8,
+              3.95,
+              0.46,
+              0
+            ],
+            [
+              60,
+              8,
+              3.95,
+              0.46,
+              0
+            ],
+            [
+              39,
+              12,
+              3.95,
+              0.46,
+              0
+            ],
+            [
+              46,
+              12,
+              3.95,
+              0.46,
+              0
+            ],
+            [
+              51,
+              12,
+              3.95,
+              0.46,
+              0
+            ],
+            [
+              55,
+              12,
+              3.95,
+              0.46,
+              0
+            ]
+          ]
+        },
+        "A2": {
+          "length": 4,
+          "notes": [
+            [
+              41,
+              0,
+              3.95,
+              0.42,
+              0
+            ],
+            [
+              48,
+              0,
+              3.95,
+              0.42,
+              0
+            ],
+            [
+              52,
+              0,
+              3.95,
+              0.42,
+              0
+            ],
+            [
+              57,
+              0,
+              3.95,
+              0.42,
+              0
+            ],
+            [
+              43,
+              4,
+              3.95,
+              0.42,
+              0
+            ],
+            [
+              50,
+              4,
+              3.95,
+              0.42,
+              0
+            ],
+            [
+              54,
+              4,
+              3.95,
+              0.42,
+              0
+            ],
+            [
+              59,
+              4,
+              3.95,
+              0.42,
+              0
+            ],
+            [
+              44,
+              8,
+              3.95,
+              0.42,
+              0
+            ],
+            [
+              51,
+              8,
+              3.95,
+              0.42,
+              0
+            ],
+            [
+              55,
+              8,
+              3.95,
+              0.42,
+              0
+            ],
+            [
+              60,
+              8,
+              3.95,
+              0.42,
+              0
+            ],
+            [
+              39,
+              12,
+              3.95,
+              0.42,
+              0
+            ],
+            [
+              46,
+              12,
+              3.95,
+              0.42,
+              0
+            ],
+            [
+              50,
+              12,
+              3.95,
+              0.42,
+              0
+            ],
+            [
+              55,
+              12,
+              3.95,
+              0.42,
+              0
+            ]
+          ]
+        }
+      },
+      "effects": [
+        {
+          "type": "reverb",
+          "params": {
+            "room": 0.84,
+            "damp": 0.62,
+            "delay": 0.18,
+            "width": 1.0,
+            "wet": 0.42
+          },
+          "bypass": 0
+        },
+        null
+      ],
+      "mixer": {
+        "eq_bass": -0.32,
+        "eq_mid": -0.06,
+        "eq_high": 0.08,
+        "send_delay": 0.2,
+        "send_reverb": 0.64,
+        "pan": 0.18,
+        "width": 1.0,
+        "volume": 0.32
+      },
+      "preset": "Glass Choir",
+      "harm1": [
+        1,
+        0,
+        0.5,
+        0,
+        0.32,
+        0,
+        0,
+        0.2,
+        0,
+        0,
+        0.12,
+        0,
+        0,
+        0,
+        0.08,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "harm2": [
+        1,
+        0.6,
+        0.4,
+        0.32,
+        0.24,
+        0.2,
+        0.16,
+        0.12,
+        0.1,
+        0.08,
+        0.06,
+        0.05,
+        0.04,
+        0.04,
+        0.03,
+        0.03,
+        0.02,
+        0.02,
+        0.02,
+        0.01,
+        0.01,
+        0.01,
+        0.01,
+        0.01
+      ],
+      "width1": 0.45,
+      "width2": 0.3
+    },
+    {
+      "type": "organ",
+      "name": "Food Court Organ",
+      "params": {
+        "bar16": 0.7,
+        "bar5_13": 0.0,
+        "bar8": 0.85,
+        "bar4": 0.5,
+        "bar2_23": 0.0,
+        "bar2": 0.2,
+        "bar1_35": 0.0,
+        "bar1_13": 0.0,
+        "bar1": 0.0,
+        "perc_tone": 0.5,
+        "perc_decay": 0.0,
+        "leslie_speed": 0.2,
+        "leslie_depth": 0.35,
+        "drive": 0.0,
+        "volume": 1.0
+      },
+      "poly": 8,
+      "mute": 0,
+      "solo": 0,
+      "octave": 4,
+      "bank": 0,
+      "pattern": 0,
+      "transpose": 0,
+      "transpose_steps": [
+        {
+          "transpose": 0,
+          "loops": 1
+        },
+        {
+          "transpose": 0,
+          "loops": 1
+        },
+        {
+          "transpose": 0,
+          "loops": 1
+        },
+        {
+          "transpose": 0,
+          "loops": 1
+        }
+      ],
+      "looper_bank": 0,
+      "looper_mode": "queue",
+      "patterns": {
+        "A1": {
+          "length": 4,
+          "notes": [
+            [
+              65,
+              0,
+              1.4,
+              0.68,
+              0
+            ],
+            [
+              69,
+              2,
+              0.8,
+              0.58,
+              0
+            ],
+            [
+              72,
+              3,
+              0.7,
+              0.64,
+              0
+            ],
+            [
+              60,
+              4,
+              1.6,
+              0.62,
+              0
+            ],
+            [
+              64,
+              6.5,
+              1.0,
+              0.58,
+              0
+            ],
+            [
+              68,
+              8,
+              1.2,
+              0.66,
+              0
+            ],
+            [
+              72,
+              9.5,
+              0.8,
+              0.62,
+              0
+            ],
+            [
+              75,
+              11,
+              0.8,
+              0.66,
+              0
+            ],
+            [
+              63,
+              12,
+              1.6,
+              0.62,
+              0
+            ],
+            [
+              67,
+              14,
+              1.4,
+              0.58,
+              0
+            ]
+          ]
+        },
+        "A2": {
+          "length": 4,
+          "notes": [
+            [
+              65,
+              0,
+              2.8,
+              0.46,
+              0
+            ],
+            [
+              72,
+              0,
+              2.8,
+              0.46,
+              0
+            ],
+            [
+              67,
+              4,
+              2.8,
+              0.46,
+              0
+            ],
+            [
+              74,
+              4,
+              2.8,
+              0.46,
+              0
+            ],
+            [
+              68,
+              8,
+              2.8,
+              0.46,
+              0
+            ],
+            [
+              75,
+              8,
+              2.8,
+              0.46,
+              0
+            ],
+            [
+              63,
+              12,
+              2.8,
+              0.46,
+              0
+            ],
+            [
+              70,
+              12,
+              2.8,
+              0.46,
+              0
+            ]
+          ]
+        }
+      },
+      "effects": [
+        {
+          "type": "phaser",
+          "params": {
+            "low": 0.2,
+            "high": 0.68,
+            "depth": 0.28,
+            "rate": 0.14,
+            "feedback": 0.18
+          },
+          "bypass": 0
+        },
+        null
+      ],
+      "mixer": {
+        "eq_bass": -0.22,
+        "eq_mid": 0.04,
+        "eq_high": -0.06,
+        "send_delay": 0.18,
+        "send_reverb": 0.38,
+        "pan": 0.1,
+        "width": 0.58,
+        "volume": 0.36
+      },
+      "preset": "Mellow Flutes"
+    },
+    {
+      "type": "bitsynth",
+      "name": "Arcade Reflection",
+      "params": {
+        "blend": 0.6,
+        "octave": 0,
+        "semis": 0,
+        "cents": 0,
+        "volume": 1.0
+      },
+      "poly": 4,
+      "mute": 0,
+      "solo": 0,
+      "octave": 4,
+      "bank": 0,
+      "pattern": 0,
+      "transpose": 0,
+      "transpose_steps": [
+        {
+          "transpose": 0,
+          "loops": 1
+        },
+        {
+          "transpose": 0,
+          "loops": 1
+        },
+        {
+          "transpose": 0,
+          "loops": 1
+        },
+        {
+          "transpose": 0,
+          "loops": 1
+        }
+      ],
+      "looper_bank": 0,
+      "looper_mode": "queue",
+      "patterns": {
+        "A1": {
+          "length": 4,
+          "notes": [
+            [
+              77,
+              0.5,
+              0.35,
+              0.58,
+              0
+            ],
+            [
+              72,
+              2.5,
+              0.5,
+              0.52,
+              0
+            ],
+            [
+              79,
+              5.5,
+              0.35,
+              0.56,
+              0
+            ],
+            [
+              75,
+              8.5,
+              0.5,
+              0.58,
+              0
+            ],
+            [
+              80,
+              11,
+              0.35,
+              0.54,
+              0
+            ],
+            [
+              72,
+              13,
+              0.5,
+              0.5,
+              0
+            ],
+            [
+              75,
+              15.5,
+              0.25,
+              0.56,
+              0
+            ]
+          ]
+        },
+        "A2": {
+          "length": 4,
+          "notes": [
+            [
+              65,
+              0.0,
+              0.82,
+              0.5599999999999999,
+              0
+            ],
+            [
+              69,
+              1.0,
+              0.82,
+              0.48,
+              0
+            ],
+            [
+              72,
+              2.0,
+              0.82,
+              0.48,
+              0
+            ],
+            [
+              76,
+              3.0,
+              0.82,
+              0.48,
+              0
+            ],
+            [
+              67,
+              4.0,
+              0.82,
+              0.5599999999999999,
+              0
+            ],
+            [
+              71,
+              5.0,
+              0.82,
+              0.48,
+              0
+            ],
+            [
+              74,
+              6.0,
+              0.82,
+              0.48,
+              0
+            ],
+            [
+              78,
+              7.0,
+              0.82,
+              0.48,
+              0
+            ],
+            [
+              68,
+              8.0,
+              0.82,
+              0.5599999999999999,
+              0
+            ],
+            [
+              72,
+              9.0,
+              0.82,
+              0.48,
+              0
+            ],
+            [
+              75,
+              10.0,
+              0.82,
+              0.48,
+              0
+            ],
+            [
+              79,
+              11.0,
+              0.82,
+              0.48,
+              0
+            ],
+            [
+              63,
+              12.0,
+              0.82,
+              0.5599999999999999,
+              0
+            ],
+            [
+              67,
+              13.0,
+              0.82,
+              0.48,
+              0
+            ],
+            [
+              70,
+              14.0,
+              0.82,
+              0.48,
+              0
+            ],
+            [
+              74,
+              15.0,
+              0.82,
+              0.48,
+              0
+            ]
+          ]
+        }
+      },
+      "effects": [
+        {
+          "type": "bitcrusher",
+          "params": {
+            "depth": 10,
+            "rate": 0.7,
+            "jitter": 0.08,
+            "wet": 0.32
+          },
+          "bypass": 0
+        },
+        {
+          "type": "delay",
+          "params": {
+            "time": 0.52,
+            "feedback": 0.4,
+            "wet": 0.3,
+            "mode": 3
+          },
+          "bypass": 0
+        }
+      ],
+      "mixer": {
+        "eq_bass": -0.5,
+        "eq_mid": -0.04,
+        "eq_high": 0.04,
+        "send_delay": 0.46,
+        "send_reverb": 0.42,
+        "pan": -0.28,
+        "width": 0.32,
+        "volume": 0.22
+      },
+      "preset": "Alien Talk",
+      "expr_a": "t*(t>>((t>>12)%12)&31)",
+      "expr_b": "t%(t>>8|t<<3)",
+      "expr_sel": 0
+    },
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "master": {
+    "params": {
+      "dly_loop": 0,
+      "dly_sync": 1,
+      "dly_first_tap": 0,
+      "dly_steps": 1,
+      "dly_time": 0.58,
+      "dly_feedback": 0.42,
+      "dly_damping": 0.42,
+      "dly_wet": 0.76,
+      "dly_pan1": -0.4,
+      "dly_pan2": 0.4,
+      "dly_bypass": 1,
+      "rev_predelay": 0.08,
+      "rev_room": 0.78,
+      "rev_damping": 0.62,
+      "rev_diffuse": 0.62,
+      "rev_dither": 0,
+      "rev_early": 0.25,
+      "rev_er_decay": 0.5,
+      "rev_stereo_delay": 0.3,
+      "rev_stereo_spread": 0.7,
+      "rev_wet": 0.82,
+      "rev_bypass": 1,
+      "eq_bass": 0.06,
+      "eq_bass_freq": 0.3,
+      "eq_mid": -0.08,
+      "eq_mid_freq": 0.6,
+      "eq_high": -0.12,
+      "eq_bypass": 1,
+      "lim_pre": 1.08,
+      "lim_attack": 0.08,
+      "lim_release": 0.28,
+      "lim_post": 0.92,
+      "lim_bypass": 1,
+      "volume": 0.68
+    },
+    "effects": [
+      null,
+      null
+    ]
+  },
+  "transport": {
+    "playing": false,
+    "mode": "song",
+    "record": false,
+    "pos": 0.0,
+    "start_pos": 0.0,
+    "loop": null
+  },
+  "audio": {
+    "sample_rate": 44100,
+    "block_size": 2048
+  },
+  "song": [
+    {
+      "id": 1,
+      "machine": 0,
+      "bank": 0,
+      "pattern": 0,
+      "start": 0,
+      "length": 16
+    },
+    {
+      "id": 2,
+      "machine": 0,
+      "bank": 0,
+      "pattern": 1,
+      "start": 16,
+      "length": 8
+    },
+    {
+      "id": 3,
+      "machine": 0,
+      "bank": 0,
+      "pattern": 0,
+      "start": 24,
+      "length": 16
+    },
+    {
+      "id": 4,
+      "machine": 1,
+      "bank": 0,
+      "pattern": 0,
+      "start": 0,
+      "length": 12
+    },
+    {
+      "id": 5,
+      "machine": 1,
+      "bank": 0,
+      "pattern": 1,
+      "start": 12,
+      "length": 12
+    },
+    {
+      "id": 6,
+      "machine": 1,
+      "bank": 0,
+      "pattern": 0,
+      "start": 24,
+      "length": 16
+    },
+    {
+      "id": 7,
+      "machine": 2,
+      "bank": 0,
+      "pattern": 0,
+      "start": 8,
+      "length": 12
+    },
+    {
+      "id": 8,
+      "machine": 2,
+      "bank": 0,
+      "pattern": 1,
+      "start": 24,
+      "length": 8
+    },
+    {
+      "id": 9,
+      "machine": 2,
+      "bank": 0,
+      "pattern": 0,
+      "start": 32,
+      "length": 8
+    },
+    {
+      "id": 10,
+      "machine": 3,
+      "bank": 0,
+      "pattern": 0,
+      "start": 12,
+      "length": 8
+    },
+    {
+      "id": 11,
+      "machine": 3,
+      "bank": 0,
+      "pattern": 1,
+      "start": 20,
+      "length": 4
+    },
+    {
+      "id": 12,
+      "machine": 3,
+      "bank": 0,
+      "pattern": 0,
+      "start": 28,
+      "length": 12
+    }
+  ],
+  "automation": {
+    "pattern": {},
+    "song": {
+      "1:morph": {
+        "keys": [
+          [
+            0,
+            0.08
+          ],
+          [
+            48,
+            0.62
+          ],
+          [
+            96,
+            0.24
+          ],
+          [
+            128,
+            0.76
+          ],
+          [
+            160,
+            0.2
+          ]
+        ]
+      },
+      "3:blend": {
+        "keys": [
+          [
+            0,
+            0.65
+          ],
+          [
+            64,
+            0.18
+          ],
+          [
+            112,
+            0.8
+          ],
+          [
+            160,
+            0.36
+          ]
+        ]
+      }
+    }
+  }
+}
