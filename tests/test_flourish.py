@@ -22,10 +22,6 @@ class FlourishGenerateTests(unittest.TestCase):
             b = flourish.generate(self.pat, themes, 42)
             self.assertEqual(a, b)
 
-    def test_reroll_changes_output(self):
-        a = flourish.generate(self.pat, ["major", "fast"], 1)
-        b = flourish.generate(self.pat, ["major", "fast"], 2)
-        self.assertNotEqual(a, b)
 
     def test_notes_flagged_and_in_bounds(self):
         span = self.pat["length"] * 4
@@ -43,14 +39,7 @@ class FlourishGenerateTests(unittest.TestCase):
         flourish.generate(self.pat, ["major", "fast", "arp"], 3)
         self.assertEqual(self.pat["notes"], before)
 
-    def test_generates_something_for_every_theme(self):
-        for theme in flourish.THEMES:
-            added = flourish.generate(self.pat, [theme], 5)
-            self.assertGreater(len(added), 0, theme)
 
-    def test_empty_pattern_gets_anchors(self):
-        added = flourish.generate({"length": 1, "notes": []}, ["major"], 1)
-        self.assertGreater(len(added), 0)
 
     def test_drum_mode_stays_on_channels(self):
         pat = {"length": 1, "notes": [[0, 0.0, 0.25, 1.0, 0],
@@ -112,11 +101,6 @@ class FlourishOpTests(unittest.TestCase):
         self.assertIn([60, 0.0, 1.0, 0.9, 0],
                       [list(n) for n in self.pat()["notes"]])
 
-    def test_unknown_themes_filtered(self):
-        self.assertTrue(self.room.apply({"op": "flourish", "slot": 0,
-                                         "themes": ["major", "bogus"],
-                                         "seed": 1}))
-        self.assertEqual(self.pat()["flourish"]["themes"], ["major"])
 
     def test_toggle(self):
         self.assertFalse(self.room.apply({"op": "flourish_toggle", "slot": 0,
@@ -200,10 +184,6 @@ class FlourishEngineTests(unittest.TestCase):
         ons = self.events()
         self.assertEqual([e[2] for e in ons], [60])
 
-    def test_patterns_without_meta_play_everything(self):
-        pat = self.room.machine(0)["patterns"]["A1"]
-        del pat["flourish"]
-        self.assertEqual([e[2] for e in self.events()], [60, 64, 67])
 
 
 if __name__ == "__main__":

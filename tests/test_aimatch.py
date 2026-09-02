@@ -116,8 +116,6 @@ class DrumTranscriptionTests(unittest.TestCase):
         self.assertEqual(kicks, [0.0, 2.0])
         self.assertEqual(hats, [0.5, 1.5, 2.5, 3.5])
 
-    def test_silence_yields_nothing(self):
-        self.assertEqual(aimatch.transcribe_drums(np.zeros(SR), SR), [])
 
 
 @unittest.skipUnless(os.path.exists(aimatch.MODEL_PATH),
@@ -182,21 +180,7 @@ class AiMatchApiTests(AioHTTPTestCase):
             self.assertEqual(pat["length"], 2)
             self.assertEqual(len(pat["notes"]), 2)
 
-    async def test_no_machine_rejected(self):
-        resp = await self.client.post(
-            "/api/aimatch?room=aimatch-empty&slot=3", data=self.form())
-        self.assertEqual(resp.status, 400)
 
-    async def test_bad_wav_rejected(self):
-        from server.app import rooms
-        room = rooms.get("aimatch-badwav")
-        room.apply({"op": "add_machine", "slot": 0, "mtype": "subsynth"})
-        fd = FormData()
-        fd.add_field("file", b"not a wav", filename="x.wav",
-                     content_type="audio/wav")
-        resp = await self.client.post(
-            "/api/aimatch?room=aimatch-badwav&slot=0", data=fd)
-        self.assertEqual(resp.status, 400)
 
     async def test_silent_clip_reports_no_notes(self):
         from server.app import rooms

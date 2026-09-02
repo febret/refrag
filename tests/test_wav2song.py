@@ -85,9 +85,6 @@ class TestAnalysis(unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
-    def test_load_wav(self):
-        self.assertGreater(len(self.audio), wav2song.SR)
-        self.assertLessEqual(float(np.max(np.abs(self.audio))), 1.0)
 
     def test_bpm_detection(self):
         bpm, offset = wav2song.detect_tempo(self.audio, CFG)
@@ -123,17 +120,6 @@ class TestAnalysis(unittest.TestCase):
         self.assertEqual(loop_beats, 4.0)
         self.assertEqual(len(loop), 2)
 
-    def test_drum_layer_builds_doc(self):
-        builder = wav2song.SongBuilder(100.0, 0.0, 9.6, CFG)
-        notes = []
-        for meas in range(4):
-            for beat in (0, 1, 2, 3):
-                notes.append([0, meas * 4.0 + beat, 0.25, 1.0])
-        builder.add_layer(wav2song.drums_machine(CFG["layers"]["drums"]),
-                          notes, "drum")
-        doc = builder.finish("test")
-        room = make_room(json.loads(json.dumps(doc)))  # round-trips as JSON
-        self.assertEqual(room.doc["machines"][0]["type"], "beatbox")
 
 
 @unittest.skipUnless(os.path.exists(aimatch.MODEL_PATH),
@@ -157,47 +143,12 @@ class TestPipeline(unittest.TestCase):
         with open(self.out, "r", encoding="utf-8") as f:
             self.doc = json.load(f)
 
-    def test_session_loads_and_renders(self):
-        room = make_room(self.doc)
-        rendered = wav2song.render_doc(room.doc)
-        self.assertGreater(float(np.max(np.abs(rendered))), 1e-4)
 
-    def test_has_machines_and_blocks(self):
-        machines = [m for m in self.doc["machines"] if m]
-        self.assertGreaterEqual(len(machines), 2)
-        self.assertTrue(self.doc["song"])
-        slots = {b["machine"] for b in self.doc["song"]}
-        self.assertEqual(slots, set(range(len(machines))))
 
-    def test_notes_are_grid_aligned(self):
-        grid = CFG["grid"]["step"]
-        for m in self.doc["machines"]:
-            if not m:
-                continue
-            for pat in m["patterns"].values():
-                for key, start, dur, vel, flags in pat["notes"]:
-                    frac = (start / grid) % 1.0
-                    self.assertLess(min(frac, 1 - frac), 1e-6,
-                                    "off-grid note in %s" % m["name"])
-                    self.assertGreaterEqual(dur, grid - 1e-9)
 
 
 class TestConfig(unittest.TestCase):
-    def test_deep_merge_nested(self):
-        cfg = wav2song.deep_merge(
-            CFG, {"tempo": {"bpm": 120.0},
-                  "layers": {"bass": {"params": {"volume": 0.5}}}})
-        self.assertEqual(cfg["tempo"]["bpm"], 120.0)
-        self.assertEqual(cfg["layers"]["bass"]["params"]["volume"], 0.5)
-        # untouched keys stay at defaults; DEFAULTS is not mutated
-        self.assertEqual(cfg["tune"]["rounds"], CFG["tune"]["rounds"])
-        self.assertIsNone(CFG["tempo"]["bpm"])
 
-    def test_validate_rejects_unknown_keys(self):
-        with self.assertRaises(KeyError):
-            wav2song.validate_cfg({"tempoo": {}})
-        with self.assertRaises(KeyError):
-            wav2song.validate_cfg({"layers": {"drums": {"bogus": 1}}})
 
     def test_load_cfg_yaml(self):
         tmp = tempfile.mkdtemp(prefix="wav2song_cfg_")

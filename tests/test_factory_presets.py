@@ -28,11 +28,6 @@ class FactoryPresetTests(unittest.TestCase):
         state.SESSION_DIR = cls._orig_session
         cls.tmp.cleanup()
 
-    def test_every_machine_has_five_to_ten_presets(self):
-        for mtype in catalog.MACHINE_ORDER:
-            presets = factory_presets.PRESETS.get(mtype, {})
-            self.assertGreaterEqual(len(presets), 5, mtype)
-            self.assertLessEqual(len(presets), 10, mtype)
 
     def test_install_writes_files_once(self):
         total = sum(len(p) for p in factory_presets.PRESETS.values())

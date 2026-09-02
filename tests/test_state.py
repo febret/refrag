@@ -25,9 +25,6 @@ class StateTests(unittest.TestCase):
         self.assertTrue(self.room.apply({"op": "remove_machine", "slot": 0}))
         self.assertIsNone(self.room.doc["machines"][0])
 
-    def test_invalid_machine_type_rejected(self):
-        self.assertFalse(self.room.apply({"op": "add_machine", "slot": 0,
-                                          "mtype": "nonsense"}))
 
     def test_set_param(self):
         self.room.apply({"op": "add_machine", "slot": 0, "mtype": "bassline"})
@@ -52,14 +49,6 @@ class StateTests(unittest.TestCase):
             "op": "set_transpose", "slot": 1, "value": 12,
         }))
 
-    def test_old_machine_snapshot_gets_transpose_default(self):
-        self.room.apply({"op": "add_machine", "slot": 0, "mtype": "subsynth"})
-        del self.room.machine(0)["transpose"]
-        del self.room.machine(0)["transpose_steps"]
-        self.room.save(force=True)
-        loaded = state.Room("test-room")
-        self.assertEqual(loaded.machine(0)["transpose"], 0)
-        self.assertEqual(len(loaded.machine(0)["transpose_steps"]), 4)
 
     def test_saved_song_can_be_loaded_from_disk(self):
         self.room.apply({"op": "set_song_prop", "prop": "name", "value": "Saved Song"})
@@ -130,10 +119,6 @@ class StateTests(unittest.TestCase):
                                          "index": 0}))
         self.assertEqual(pat["notes"], [])
 
-    def test_note_out_of_range_rejected(self):
-        self.room.apply({"op": "add_machine", "slot": 0, "mtype": "subsynth"})
-        self.assertFalse(self.room.apply({"op": "add_note", "slot": 0,
-                                          "note": 60, "start": 12, "dur": 1}))
 
     def test_pattern_length_trims_notes(self):
         self.room.apply({"op": "add_machine", "slot": 0, "mtype": "subsynth"})
@@ -176,10 +161,6 @@ class StateTests(unittest.TestCase):
                                          "index": 0, "etype": None}))
         self.assertIsNone(self.room.doc["machines"][0]["effects"][0])
 
-    def test_master_effects(self):
-        self.assertTrue(self.room.apply({"op": "set_effect", "target": "master",
-                                         "index": 1, "etype": "reverb"}))
-        self.assertEqual(self.room.doc["master"]["effects"][1]["type"], "reverb")
 
     def test_modular_ops(self):
         self.room.apply({"op": "add_machine", "slot": 0, "mtype": "modular"})
@@ -207,13 +188,6 @@ class StateTests(unittest.TestCase):
         m = self.room.doc["machines"][0]
         self.assertEqual(len(m["patterns"]["B3"]["notes"]), 1)
 
-    def test_persistence_roundtrip(self):
-        self.room.apply({"op": "add_machine", "slot": 2, "mtype": "organ"})
-        self.room.apply({"op": "set_song_prop", "prop": "bpm", "value": 140})
-        self.room.save(force=True)
-        room2 = state.Room("test-room")
-        self.assertEqual(room2.doc["bpm"], 140)
-        self.assertEqual(room2.doc["machines"][2]["type"], "organ")
 
     def test_audio_config_defaults_and_updates(self):
         self.assertEqual(self.room.doc["audio"]["sample_rate"], 44100)

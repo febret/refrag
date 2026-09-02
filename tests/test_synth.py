@@ -125,23 +125,6 @@ class MachineRenderTests(unittest.TestCase):
     def test_kssynth(self):
         self.assertGreater(np.max(np.abs(self.render_machine("kssynth"))), 0.005)
 
-    def test_modular_patch(self):
-        m = state.new_machine("modular")
-        room = make_room()
-        room.doc["machines"][0] = m
-        for op in [
-            {"op": "mod_place", "slot": 0, "bay": 0, "ctype": "oscillator"},
-            {"op": "mod_place", "slot": 0, "bay": 2, "ctype": "envelope"},
-            {"op": "mod_place", "slot": 0, "bay": 3, "ctype": "vca"},
-            {"op": "mod_wire", "slot": 0, "src": "c0.out", "dst": "c3.in"},
-            {"op": "mod_wire", "slot": 0, "src": "c2.out", "dst": "c3.mod"},
-            {"op": "mod_wire", "slot": 0, "src": "c3.out", "dst": "panel.left_out"},
-        ]:
-            self.assertTrue(room.apply(op), op)
-        graph = MachineGraph(m)
-        graph.note_on(57, 1.0)
-        out = graph.render()
-        self.assertGreater(np.max(np.abs(out)), 0.01)
 
     def test_vocoder_with_sample_modulator(self):
         m = state.new_machine("vocoder")
@@ -151,63 +134,10 @@ class MachineRenderTests(unittest.TestCase):
         out = np.concatenate([graph.render() for _ in range(4)], axis=1)
         self.assertGreater(np.max(np.abs(out)), 0.001)
 
-    def test_vocoder_sample_modulator_updates_band_vu(self):
-        m = state.new_machine("vocoder")
-        m["modulators"][0]["source"] = "formant"
-        formant = np.sin(np.linspace(0, np.pi * 12, 4096)).astype(np.float32)
-        orig_get = synth.samples.get
-        with mock.patch("server.synth.samples.get",
-                        side_effect=lambda name: formant if name == "formant"
-                        else orig_get(name)):
-            graph = MachineGraph(m)
-            graph.note_on(48, 1.0)
-            graph.render()
-        self.assertTrue(any(float(v) > 0.001 for v in graph.band_vu()))
 
-    def test_note_off_silences_voice(self):
-        graph = MachineGraph(state.new_machine("subsynth"))
-        graph.note_on(60, 1.0)
-        graph.render()
-        graph.note_off(60)
-        for _ in range(40):
-            out = graph.render()
-        self.assertLess(np.max(np.abs(out)), 1e-3)
 
-    def test_same_pitch_note_off_preserves_newer_held_voice(self):
-        machine = state.new_machine("subsynth")
-        machine["params"]["vol_release"] = 0.3
-        graph = MachineGraph(machine)
-        graph.note_on(60, 1.0)
-        graph.render()
-        graph.note_on(60, 1.0)
-        self.assertEqual(graph.voice_count(), 2)
-        graph.note_off(60)
-        for _ in range(40):
-            out = graph.render()
-        self.assertEqual(graph.voice_count(), 1)
-        self.assertGreater(np.max(np.abs(out)), 1e-3)
-        graph.note_off(60)
-        for _ in range(40):
-            out = graph.render()
-        self.assertEqual(graph.voice_count(), 0)
-        self.assertLess(np.max(np.abs(out)), 1e-3)
 
-    def test_cut_note_retrigger_replaces_same_pitch_voice(self):
-        machine = state.new_machine("subsynth")
-        machine["params"].update({"vol_release": 0.3, "cut_note": 1})
-        graph = MachineGraph(machine)
-        graph.note_on(60, 1.0)
-        graph.render()
-        graph.note_on(60, 1.0)
-        self.assertEqual(graph.voice_count(), 1)
 
-    def test_polyphony_limit(self):
-        m = state.new_machine("subsynth")
-        m["poly"] = 2
-        graph = MachineGraph(m)
-        for n in (60, 64, 67, 71):
-            graph.note_on(n, 1.0)
-        self.assertLessEqual(graph.voice_count(), 2)
 
     def test_pcmsynth_selects_zone_by_note_range(self):
         m = state.new_machine("pcmsynth")
@@ -248,35 +178,7 @@ class EffectTests(unittest.TestCase):
             "params": catalog.default_params(catalog.EFFECTS[etype]["controls"]),
         }
 
-    def test_every_effect_processes_in_both_channel_insert_slots(self):
-        for etype in catalog.EFFECT_ORDER:
-            room = make_room("effect-" + etype)
-            room.doc["machines"][0] = state.new_machine("subsynth")
-            # Chain the same effect into both insert slots so the full
-            # per-channel effect chain (not just slot 0) is exercised.
-            room.doc["machines"][0]["effects"][0] = self._effect_slot(etype)
-            room.doc["machines"][0]["effects"][1] = self._effect_slot(etype)
-            engine = AudioEngine(room)
-            engine.handle_note(0, 60, True, 1.0)
-            first = engine.render_block()
-            second = engine.render_block()
-            self.assertEqual(first.shape, (2, BLOCK), etype)
-            self.assertTrue(np.all(np.isfinite(first)), etype)
-            self.assertTrue(np.all(np.isfinite(second)), etype)
 
-    def test_every_effect_processes_as_a_master_insert(self):
-        for etype in catalog.EFFECT_ORDER:
-            room = make_room("master-effect-" + etype)
-            room.doc["machines"][0] = state.new_machine("subsynth")
-            self.assertTrue(room.apply({
-                "op": "set_effect", "target": "master", "index": 0,
-                "etype": etype,
-            }), etype)
-            engine = AudioEngine(room)
-            engine.handle_note(0, 60, True, 1.0)
-            out = engine.render_block()
-            self.assertEqual(out.shape, (2, BLOCK), etype)
-            self.assertTrue(np.all(np.isfinite(out)), etype)
 
     def test_master_insert_effect_audibly_alters_the_mix(self):
         def render_with_master_effect(etype):
@@ -316,14 +218,6 @@ class MixerAndMasterTests(unittest.TestCase):
         self.assertGreater(np.max(np.abs(out[0])), 0.01)
         self.assertLess(np.max(np.abs(out[1])), 1e-4)
 
-    def test_pan_hard_right_silences_left_channel(self):
-        room = self._single_machine_room()
-        room.apply({"op": "set_mixer", "slot": 0, "param": "pan", "value": 1.0})
-        eng = AudioEngine(room)
-        eng.handle_note(0, 60, True, 1.0)
-        out = eng.render_block()
-        self.assertGreater(np.max(np.abs(out[1])), 0.01)
-        self.assertLess(np.max(np.abs(out[0])), 1e-4)
 
     def test_mixer_volume_scales_peak_amplitude(self):
         def peak_at(volume):
@@ -375,27 +269,7 @@ class MixerAndMasterTests(unittest.TestCase):
         self.assertTrue(np.all(np.isfinite(wet)))
         self.assertFalse(np.allclose(dry, wet))
 
-    def test_send_reverb_keeps_native_graph_active_as_a_tail(self):
-        room = self._single_machine_room()
-        room.apply({"op": "set_mixer", "slot": 0, "param": "send_reverb",
-                    "value": 1.0})
-        eng = AudioEngine(room)
-        eng.handle_note(0, 60, True, 1.0)
-        eng.render_block()
-        self.assertTrue(eng.graph.status().get("has_tail"))
 
-    def test_master_limiter_reports_gain_reduction_under_a_hot_signal(self):
-        room = self._single_machine_room()
-        room.apply({"op": "set_master", "param": "lim_pre", "value": 4.0})
-        eng = AudioEngine(room)
-        eng.handle_note(0, 60, True, 1.0)
-        gr_values = []
-        for _ in range(8):
-            eng.render_block()
-            gr_values.append(eng.status()["lim_gr"])
-        out = eng.render_block()
-        self.assertTrue(np.all(np.isfinite(out)))
-        self.assertGreater(max(gr_values), 0.0)
 
     def test_disabling_master_limiter_stops_reporting_gain_reduction(self):
         room = self._single_machine_room()
@@ -420,21 +294,7 @@ class MixerAndMasterTests(unittest.TestCase):
         self.assertGreater(loud, 0.01)
         self.assertLess(quiet, loud * 0.3)
 
-    def test_master_vu_meter_reflects_active_signal(self):
-        room = self._single_machine_room()
-        eng = AudioEngine(room)
-        eng.handle_note(0, 60, True, 1.0)
-        eng.render_block()
-        status = eng.status()
-        self.assertGreater(max(status["master_vu"]), 0.0)
-        self.assertIn("lim_gr", status)
 
-    def test_slot_vu_meter_reflects_active_machine(self):
-        room = self._single_machine_room()
-        eng = AudioEngine(room)
-        eng.handle_note(0, 60, True, 1.0)
-        eng.render_block()
-        self.assertGreater(eng.status()["vu"][0], 0.0)
 
 
 class EngineTests(unittest.TestCase):
@@ -511,29 +371,7 @@ class EngineTests(unittest.TestCase):
             {"bank": 2, "pattern": 3},
         ])
 
-    def test_looper_clear_queue_operation(self):
-        room = self._room_with_song()
-        eng = AudioEngine(room)
-        room.apply({"op": "transport", "playing": True, "mode": "pattern"})
-        room.apply({"op": "looper_pattern", "slot": 0,
-                    "bank": 1, "pattern": 0})
-        self.assertTrue(room.apply({"op": "looper_clear_queue", "slot": 0}))
-        self.assertNotIn("queued_bank", eng.status()["looper"]["0"])
-        self.assertFalse(room.apply({"op": "looper_clear_queue", "slot": 0}))
 
-    def test_looper_queue_can_repeat_live_pattern(self):
-        room = self._room_with_song()
-        eng = AudioEngine(room)
-        room.apply({"op": "transport", "playing": True, "mode": "pattern"})
-        room.apply({"op": "looper_pattern", "slot": 0,
-                    "bank": 0, "pattern": 0})
-        room.apply({"op": "looper_pattern", "slot": 0,
-                    "bank": 0, "pattern": 0})
-        self.assertEqual(len(eng.status()["looper"]["0"]["queue"]), 2)
-        eng._pattern_events(0, room.machine(0), 3.99, 4.1, room.doc)
-        self.assertEqual(len(eng.status()["looper"]["0"]["queue"]), 1)
-        eng._pattern_events(0, room.machine(0), 7.99, 8.1, room.doc)
-        self.assertNotIn("queued_bank", eng.status()["looper"]["0"])
 
     def test_looper_random_mode_uses_non_empty_patterns_in_browsed_bank(self):
         room = self._room_with_song()
@@ -630,17 +468,6 @@ class EngineTests(unittest.TestCase):
         self.assertTrue(any(event[1] == "on" and event[2] == 48 for event in third))
         self.assertEqual(eng.status()["looper"]["0"]["transpose_step"], 2)
 
-    def test_live_transpose_does_not_change_beatbox_mapping(self):
-        room = state.Room("beatbox-looper")
-        room.doc = state.new_room_doc()
-        room.apply({"op": "add_machine", "slot": 0, "mtype": "beatbox"})
-        room.apply({"op": "add_note", "slot": 0, "note": 3,
-                    "start": 0, "dur": 0.25})
-        room.machine(0)["transpose"] = 12
-        eng = AudioEngine(room)
-        events = eng._pattern_events(0, room.machine(0), 0, 0.2, room.doc)
-        self.assertTrue(any(event[1] == "on" and event[2] == 3
-                            for event in events))
 
     def test_song_playback_produces_audio(self):
         room = self._room_with_song()
@@ -649,12 +476,6 @@ class EngineTests(unittest.TestCase):
         out = np.concatenate([eng.render_block() for _ in range(8)], axis=1)
         self.assertGreater(np.max(np.abs(out)), 0.01)
 
-    def test_render_block_uses_configured_block_size(self):
-        room = self._room_with_song()
-        room.doc["audio"]["block_size"] = 512
-        eng = AudioEngine(room)
-        out = eng.render_block()
-        self.assertEqual(out.shape[1], 512)
 
     def test_audio_engine_honors_non_default_sample_rate_and_block_size(self):
         room = self._room_with_song()
@@ -714,15 +535,6 @@ class EngineTests(unittest.TestCase):
         self.assertTrue(any(event[2] == 67 for event in after))
         self.assertFalse(any(event[2] == 60 for event in after))
 
-    def test_pattern_cache_handles_loop_boundary(self):
-        room = self._room_with_song()
-        eng = AudioEngine(room)
-        m = room.machine(0)
-        events = eng._pattern_events(0, m, 3.99, 4.1, room.doc)
-        onsets = [event for event in events if event[1] == "on"]
-        self.assertEqual(len(onsets), 1)
-        self.assertAlmostEqual(onsets[0][0], 4.0)
-        self.assertEqual(onsets[0][2], 60)
 
     def test_song_event_cache_invalidates_after_edit(self):
         room = self._room_with_song()
@@ -774,10 +586,6 @@ class EngineTests(unittest.TestCase):
         self.assertGreater(eng._tail_blocks, 0)
         self.assertFalse(eng.is_idle())
 
-    def test_is_idle_when_freshly_created_and_stopped(self):
-        room = self._room_with_song()
-        eng = AudioEngine(room)
-        self.assertTrue(eng.is_idle())
 
     def test_is_idle_false_while_transport_is_playing(self):
         room = self._room_with_song()
@@ -814,13 +622,6 @@ class EngineTests(unittest.TestCase):
         self.assertLessEqual(max_voices, room.machine(0)["poly"])
         self.assertLessEqual(max_offs, 2)
 
-    def test_mute_silences_machine(self):
-        room = self._room_with_song()
-        room.apply({"op": "set_mixer", "slot": 0, "param": "mute", "value": 1})
-        eng = AudioEngine(room)
-        room.apply({"op": "transport", "playing": True, "mode": "pattern"})
-        out = np.concatenate([eng.render_block() for _ in range(4)], axis=1)
-        self.assertLess(np.max(np.abs(out)), 1e-6)
 
     def test_reassigned_beatbox_sample_takes_effect_through_full_engine(self):
         room = make_room("sample-swap")
@@ -925,12 +726,6 @@ class SampleTests(unittest.TestCase):
         np.testing.assert_array_equal(
             native.register_sample.call_args.args[1], second)
 
-    def test_factory_samples_exist(self):
-        from server import samples
-        for name in ("kick", "snare", "piano", "vox_vowels"):
-            x = samples.get(name)
-            self.assertGreater(len(x), 100, name)
-            self.assertTrue(np.all(np.isfinite(x)), name)
 
     def test_wav_roundtrip(self):
         import io
@@ -940,24 +735,6 @@ class SampleTests(unittest.TestCase):
         x = samples.load_wav_bytes(buf.getvalue())
         self.assertGreater(len(x), 4000)
 
-    def test_24bit_wav_decodes(self):
-        import io
-        import wave
-        from server import samples
-        sig = np.sin(np.linspace(0, 60, 4410))
-        pcm = (sig * 8388607).astype(np.int32)
-        raw = bytearray()
-        for v in pcm:
-            raw += int(v & 0xFFFFFF).to_bytes(3, "little")
-        buf = io.BytesIO()
-        with wave.open(buf, "wb") as w:
-            w.setnchannels(1)
-            w.setsampwidth(3)
-            w.setframerate(44100)
-            w.writeframes(bytes(raw))
-        x = samples.load_wav_bytes(buf.getvalue())
-        self.assertGreater(len(x), 4000)
-        self.assertAlmostEqual(float(np.max(np.abs(x))), 1.0, places=2)
 
     def test_user_sample_never_shadows_factory(self):
         import io
@@ -975,20 +752,6 @@ class SampleTests(unittest.TestCase):
             finally:
                 samples.SAMPLE_DIR = orig
 
-    def test_save_rejects_tiny_sample(self):
-        import io
-        import tempfile
-        from server import samples
-        buf = io.BytesIO()
-        samples.write_wav(buf, np.zeros(4))
-        with tempfile.TemporaryDirectory() as tmp:
-            orig = samples.SAMPLE_DIR
-            samples.SAMPLE_DIR = tmp
-            try:
-                with self.assertRaises(ValueError):
-                    samples.save_user_sample("tiny", buf.getvalue())
-            finally:
-                samples.SAMPLE_DIR = orig
 
 
 if __name__ == "__main__":

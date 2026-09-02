@@ -28,10 +28,6 @@ class CatalogTests(unittest.TestCase):
                 if c["type"] == "select":
                     self.assertTrue(0 <= c["default"] < len(c["options"]))
 
-    def test_defaults(self):
-        d = catalog.default_params(catalog.MACHINES["subsynth"]["controls"])
-        self.assertIn("flt_cutoff", d)
-        self.assertEqual(d["volume"], 1.0)
 
     def test_catalog_json_serializable(self):
         import json

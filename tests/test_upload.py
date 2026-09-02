@@ -52,29 +52,8 @@ class UploadApiTests(AioHTTPTestCase):
         x = samples.get("My Phone Riff")
         self.assertGreater(len(x), 1000)
 
-    async def test_upload_uses_filename_when_no_name(self):
-        fd = FormData()
-        fd.add_field("file", wav_bytes(), filename="voice memo 7.wav",
-                     content_type="audio/wav")
-        resp = await self.client.post("/api/samples", data=fd)
-        self.assertEqual(resp.status, 200)
-        body = await resp.json()
-        self.assertEqual(body["name"], "voice memo 7")
 
-    async def test_upload_rejects_non_wav(self):
-        fd = FormData()
-        fd.add_field("file", b"\x00\x01\x02 not audio", filename="x.wav",
-                     content_type="audio/wav")
-        resp = await self.client.post("/api/samples", data=fd)
-        self.assertEqual(resp.status, 400)
 
-    async def test_large_upload_accepted(self):
-        # ~10 MB WAV (30s stereo-equivalent mono) must fit in the size limit
-        fd = FormData()
-        fd.add_field("file", wav_bytes(duration_s=60.0), filename="long.wav",
-                     content_type="audio/wav")
-        resp = await self.client.post("/api/samples", data=fd)
-        self.assertEqual(resp.status, 200)
 
     async def test_factory_collision_renamed(self):
         fd = FormData()

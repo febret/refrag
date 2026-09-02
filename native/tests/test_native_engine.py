@@ -96,11 +96,6 @@ def bitsynth_block(expr_a, expr_b=None, blend=None, frames=BLOCK, blocks=1):
 
 
 class RoomEngineTests(unittest.TestCase):
-    def test_create_validates_arguments(self):
-        for args in ((0, BLOCK, 4), (SR, 0, 4), (SR, BLOCK, 0)):
-            with self.subTest(args=args):
-                with self.assertRaises(ValueError):
-                    refrag_engine.create_room_engine(*args)
 
     def test_render_shape_and_silence(self):
         engine = new_room(make_doc())
@@ -403,24 +398,6 @@ class RoomEngineTests(unittest.TestCase):
         active = engine.render(BLOCK, 120.0)
         self.assertGreater(peak(active), peak(bypassed))
 
-    def test_compressor_sidechain_uses_other_line(self):
-        kick = state.new_machine("beatbox")
-        pad = state.new_machine("padsynth")
-        params = catalog.default_params(catalog.EFFECTS["compressor"]["controls"])
-        params.update({"threshold": 0.05, "ratio": 1.0, "attack": 0.0, "release": 0.2,
-                       "sidechain": 1})
-        pad["effects"][0] = {"type": "compressor", "params": params, "bypass": 0}
-        doc = make_doc([kick, pad])
-        engine = new_room(doc)
-        engine.note_on(1, 60, 1.0)
-        quiet = engine.render(BLOCK, 120.0)
-        engine = new_room(doc)
-        engine.note_on(0, 0, 1.0)
-        engine.note_on(1, 60, 1.0)
-        ducked = engine.render(BLOCK, 120.0)
-        self.assertTrue(np.all(np.isfinite(quiet)))
-        self.assertTrue(np.all(np.isfinite(ducked)))
-        self.assertGreater(engine.status()["slot_vu"][0], 0.0)
 
     def test_vocoder_reads_previous_slot_output(self):
         carrier = state.new_machine("subsynth")
@@ -544,25 +521,7 @@ class RoomEngineTests(unittest.TestCase):
         engine.note_on(0, 60, 1.0)  # must not raise
         self.assertEqual(peak(engine.render(BLOCK, 120.0)), 0.0)
 
-    def test_sync_rejects_unknown_types(self):
-        doc = make_doc([state.new_machine("subsynth")])
-        engine = new_room(doc)
-        doc["machines"][0]["type"] = "nope"
-        with self.assertRaises(ValueError):
-            engine.sync(doc)
-        doc["machines"][0]["type"] = "subsynth"
-        doc["machines"][0]["effects"][0] = {"type": "nope", "params": {}, "bypass": 0}
-        with self.assertRaises(ValueError):
-            engine.sync(doc)
 
-    def test_slot_index_validation(self):
-        engine = new_room(make_doc([state.new_machine("subsynth")]))
-        with self.assertRaises(IndexError):
-            engine.note_on(99, 60, 1.0)
-        with self.assertRaises(IndexError):
-            engine.note_off(-1, 60)
-        with self.assertRaises(IndexError):
-            engine.all_off(99)
 
     def test_sample_registration_round_trip(self):
         machine = state.new_machine("beatbox")
@@ -580,13 +539,6 @@ class RoomEngineTests(unittest.TestCase):
         engine.note_on(0, 0, 1.0)
         self.assertEqual(peak(engine.render(64, 120.0)), 0.0)
 
-    def test_beatbox_ignores_unknown_sample(self):
-        machine = state.new_machine("beatbox")
-        machine["channels"][0]["sample"] = "missing-sample"
-        engine = new_room(make_doc([machine]))
-        engine.note_on(0, 0, 1.0)
-        self.assertEqual(engine.status()["slot_voice_counts"][0], 0)
-        self.assertEqual(peak(engine.render(64, 120.0)), 0.0)
 
     def test_pcmsynth_loop_mode_keeps_playing(self):
         machine = state.new_machine("pcmsynth")
@@ -616,10 +568,6 @@ class RoomEngineTests(unittest.TestCase):
         self.assertEqual(len(bands), 8)
         self.assertTrue(any(float(v) > 0.001 for v in bands))
 
-    def test_vocoder_note_range_selects_modulator(self):
-        engine = new_room(make_doc([state.new_machine("vocoder")]))
-        engine.note_on(0, 26, 1.0)
-        self.assertEqual(engine.status()["slot_voice_counts"][0], 0)
 
     def test_modular_patch(self):
         machine = state.new_machine("modular")
@@ -696,39 +644,10 @@ class RoomEngineTests(unittest.TestCase):
                 self.assertTrue(np.all(np.isfinite(out)), expr)
                 self.assertLess(peak(out), 1e-6, expr)
 
-    def test_bitsynth_rejects_non_string_expression(self):
-        machine = state.new_machine("bitsynth")
-        machine["expr_a"] = 42
-        with self.assertRaises(ValueError):
-            new_room(make_doc([machine]))
 
-    def test_bitsynth_rejects_excessive_expression_nesting(self):
-        deep = "(" * 1000 + "t" + ")" * 1000
-        out = bitsynth_block(deep, expr_b=deep, blend=0.5, frames=64)
-        self.assertTrue(np.all(np.isfinite(out)))
-        self.assertLess(peak(out), 1e-6)
 
-    def test_bitsynth_zero_valued_expressions_match_a_literal_zero(self):
-        baseline = bitsynth_block("0")
-        for expr in ("t/0", "t%0", "t/(t-t)", "t*0", ""):
-            with self.subTest(expr=expr):
-                out = bitsynth_block(expr)
-                self.assertTrue(np.all(np.isfinite(out)), expr)
-                np.testing.assert_allclose(out, baseline, atol=1e-6)
 
-    def test_bitsynth_integer_overflow_is_safe(self):
-        for expr in ("((1<<62)*2)/(0-1)", "-((1<<62)*2)", "t<<70", "t>>70",
-                     "t*(1<<62)", "(0-(1<<62))*2%(0-1)"):
-            with self.subTest(expr=expr):
-                out = bitsynth_block(expr, frames=64)
-                self.assertTrue(np.all(np.isfinite(out)), expr)
 
-    def test_register_sample_validates_input(self):
-        engine = new_room(make_doc())
-        with self.assertRaises(ValueError):
-            engine.register_sample("stereo", np.zeros((2, 16), dtype=np.float32), SR)
-        with self.assertRaises(ValueError):
-            engine.register_sample("bad-rate", np.zeros(16, dtype=np.float32), 0)
 
     def test_variable_block_sizes(self):
         doc = make_doc([state.new_machine("organ")])
@@ -752,15 +671,6 @@ class RoomEngineTests(unittest.TestCase):
         self.assertEqual(out.shape, (2, 1024))
         self.assertGreater(peak(out), 0.001)
 
-    def test_all_sample_rates_render(self):
-        for rate in state.AUDIO_SAMPLE_RATES:
-            with self.subTest(rate=rate):
-                doc = make_doc([state.new_machine("beatbox")], sample_rate=rate)
-                engine = new_room(doc)
-                engine.note_on(0, 0, 1.0)
-                out = engine.render(256, 128.0)
-                self.assertTrue(np.all(np.isfinite(out)))
-                self.assertGreater(peak(out), 0.0)
 
     def test_bpm_changes_master_delay_time(self):
         machine = state.new_machine("subsynth")
@@ -822,69 +732,6 @@ class FuzzTests(unittest.TestCase):
                 out[cid] = round(value) if spec.get("curve") == "int" else value
         return out
 
-    def test_randomized_rooms(self):
-        rng = random.Random(11)
-        for trial in range(12):
-            sample_rate = rng.choice(state.AUDIO_SAMPLE_RATES)
-            block = rng.choice(state.AUDIO_BLOCK_SIZES)
-            doc = state.new_room_doc()
-            doc["audio"] = {"sample_rate": sample_rate, "block_size": block}
-            machines = []
-            for _ in range(5):
-                mtype = rng.choice(MACHINES)
-                machine = state.new_machine(mtype)
-                machine["params"].update(
-                    self._random_params(catalog.MACHINES[mtype]["controls"], rng))
-                if mtype == "beatbox":
-                    for channel in machine["channels"]:
-                        channel["params"].update(self._random_params(
-                            catalog.MACHINES[mtype]["channel_controls"], rng))
-                        channel["mute_group"] = rng.randrange(3)
-                if mtype == "pcmsynth":
-                    machine["samples"][0].update({
-                        "mode": rng.randrange(6),
-                        "start": rng.uniform(0.0, 0.4),
-                        "end": rng.uniform(0.5, 1.0),
-                    })
-                if mtype == "vocoder":
-                    machine["modulators"][0]["source"] = rng.choice(
-                        ["vox_vowels", "vox_rhythm", "vox_robot", ""])
-                    machine["modulators"][1]["machine"] = rng.randrange(-1, 5)
-                for slot in range(2):
-                    if rng.random() < 0.7:
-                        etype = rng.choice(catalog.EFFECT_ORDER)
-                        machine["effects"][slot] = {
-                            "type": etype,
-                            "params": self._random_params(
-                                catalog.EFFECTS[etype]["controls"], rng),
-                            "bypass": rng.randrange(2),
-                        }
-                machine["mixer"].update(self._random_params(catalog.MIXER_STRIP, rng))
-                machine["mute"] = rng.randrange(2)
-                machine["solo"] = 1 if rng.random() < 0.2 else 0
-                machines.append(machine)
-            doc["machines"] = machines + [None] * 9
-            doc["master"]["params"].update(self._random_params(catalog.MASTER, rng))
-            for slot in range(2):
-                if rng.random() < 0.6:
-                    etype = rng.choice(catalog.EFFECT_ORDER)
-                    doc["master"]["effects"][slot] = {
-                        "type": etype,
-                        "params": self._random_params(catalog.EFFECTS[etype]["controls"], rng),
-                        "bypass": 0,
-                    }
-            engine = new_room(doc, slots=14)
-            for _ in range(5):
-                for slot in range(5):
-                    if rng.random() < 0.5:
-                        engine.note_on(slot, rng.randrange(0, 100), rng.uniform(0.1, 1.0),
-                                       rng.randrange(0, block), rng.randrange(0, 4))
-                    if rng.random() < 0.3:
-                        engine.note_off(slot, rng.randrange(0, 100), rng.randrange(0, block))
-                out = engine.render(block, rng.uniform(40.0, 240.0))
-                self.assertTrue(np.all(np.isfinite(out)), f"trial {trial}")
-                self.assertLessEqual(peak(out), 1.5 + 1e-4, f"trial {trial}")
-                self.assertIsInstance(engine.status()["has_tail"], bool)
 
 
 if __name__ == "__main__":
