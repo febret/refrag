@@ -471,11 +471,33 @@ machine's type while keeping its patterns, mixer strip and insert effects
   tempo on the BPM display), global **shuffle** mode (8th "March" or 16th
   "Swing") and amount, and the **room** switcher.
 - **Options tab** — enable the audio stream, choose the shared engine
-  **sample rate** and **block size** (with a latency estimate), and upload
+  **sample rate** and **block size** (with a latency estimate), upload
   audio files or record samples from the microphone (see
-  [Using your own samples](#using-your-own-samples)). The control-panel
-  **XRUN** marker shows cumulative render deadline misses for the room.
+  [Using your own samples](#using-your-own-samples)), and configure
+  **MIDI keyboard input** (see below). The control-panel **XRUN** marker
+  shows cumulative render deadline misses for the room.
 - **Help tab** — quick pointers and a link to this guide.
+
+### MIDI keyboard input
+
+Plug a USB MIDI keyboard into your computer or mobile device (Android
+supports USB/OTG MIDI keyboards; iOS Safari does not support Web MIDI).
+In the App Menu → **Options tab**, under **MIDI keyboard input**:
+
+- **Enable MIDI input** — turns on the browser's Web MIDI access. The
+  browser will prompt for permission the first time.
+- **Input device** — pick a specific connected keyboard, or "All devices"
+  to accept input from every connected MIDI controller.
+- **MIDI channel** — filter to a single MIDI channel, or "All channels".
+- **Rescan devices** — refresh the device list if you plug something in
+  after opening the settings.
+
+Once enabled, playing notes on the MIDI keyboard controls whichever
+machine panel is currently open, exactly like clicking the on-screen
+keyboard — other people in the room see the same note-on indicator and
+keyboard highlight. This is a per-browser/device preference (not part of
+the shared room state), so each collaborator configures their own MIDI
+setup independently.
 
 ---
 

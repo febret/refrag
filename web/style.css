@@ -27,7 +27,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden;
   border-right: 2px solid #000; display: flex; flex-direction: column;
   align-items: center; padding-top: 4px; gap: 3px; overflow: hidden; }
 #machineview { grid-row: 1; grid-column: 2; overflow: auto; position: relative;
-  background:
+  padding: 6px; box-sizing: border-box; background:
     radial-gradient(ellipse at 50% -20%, #262a36 0%, var(--bg) 70%); }
 #controlpanel { grid-row: 2; grid-column: 1 / span 2; background:
   linear-gradient(#11a6ae, #0a7b82); border-top: 2px solid #033;
@@ -74,10 +74,10 @@ html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden;
 /* Machine panels                                                     */
 /* ------------------------------------------------------------------ */
 
-.machine { max-width: 1060px; margin: 8px auto; background:
+.machine { width: 100%; max-width: none; margin: 6px 0; background:
     linear-gradient(160deg, #99a3c0, #7b84a1 60%, #6b7490);
   border: 2px solid #191b24; border-radius: 6px; box-shadow: 0 6px 24px #000a;
-  padding: 6px; }
+  padding: 6px; box-sizing: border-box; }
 .machine-head { display: flex; align-items: center; gap: 10px; padding: 2px 6px 6px; }
 .machine-title { font-size: 22px; font-weight: 900; letter-spacing: 2px;
   color: #14161f; font-family: Verdana, sans-serif; font-style: italic;
@@ -320,13 +320,14 @@ html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden;
 .chord-input { margin-bottom: 8px; }
 
 /* sequencer */
-.seq-wrap { max-width: 1100px; margin: 8px auto; }
+.seq-wrap { width: 100%; max-width: none; margin: 6px 0; box-sizing: border-box; }
 .seq-canvas-wrap { position: relative; }
 .seq-canvas-wrap canvas { display: block; width: 100%; background: #cfd2dc;
   border: 1px solid #000; cursor: pointer; }
 
 /* mixer */
-.mixer-wrap, .master-wrap, .fx-wrap { max-width: 1060px; margin: 8px auto; }
+.mixer-wrap, .master-wrap, .fx-wrap { width: 100%; max-width: none; margin: 6px 0;
+  box-sizing: border-box; }
 
 .fx-slot { background: #171a26; border: 2px dashed #3a4058; border-radius: 5px;
   min-height: 120px; display: flex; align-items: center; justify-content: center;
@@ -353,14 +354,14 @@ html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden;
   font-size: 10px; width: 100%; text-align: center; border-radius: 2px;
   padding: 2px 0; cursor: pointer; text-transform: uppercase; overflow: hidden; }
 .strip .knob .k-label { color: #aab6d8; }
-.mixer-row { display: flex; gap: 6px; justify-content: center; }
+.mixer-row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
 
 /* master panel groupboxes reuse machine style but darker text fix */
 .master-wrap .machine, .fx-wrap .machine, .mixer-wrap .machine { max-width: none; }
 
 /* modular */
-.mod-bays { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
-  width: 100%; }
+.mod-bays { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 6px; width: 100%; }
 .mod-bay { min-height: 120px; background: #171a26; border: 2px dashed #3a4058;
   border-radius: 5px; display: flex; align-items: center; justify-content: center;
   color: #556; cursor: pointer; font-size: 11px; }

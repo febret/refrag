@@ -490,6 +490,7 @@ function showAppMenu() {
         el("label", "", row3).textContent = "Record sample";
         const rec = el("button", "", row3); rec.textContent = "🎤 Record from mic…";
         rec.addEventListener("click", () => { closeModal(); recordSampleModal(); });
+        buildMidiSettings(c);
       } else {
         c.innerHTML = "<div style='padding:10px;line-height:1.7;font-size:13px'>" +
           "<b>Refrag</b> — collaborative web reimplementation of the Caustic rack.<br>" +
@@ -743,6 +744,90 @@ async function pickSample(title, onPick) {
 async function loadSampleLib() {
   const r = await fetch("/api/samples");
   App.sampleLib = await r.json();
+}
+
+/* ---------------- MIDI input settings ---------------- */
+
+function buildMidiSettings(c) {
+  const heading = el("div", "menu-row", c);
+  el("label", "", heading).textContent = "MIDI keyboard input";
+
+  if (typeof MidiInput === "undefined" || !MidiInput.supported) {
+    const row = el("div", "menu-row", c);
+    el("div", "", row).textContent =
+      "Not supported by this browser (try Chrome/Edge on desktop or Android).";
+    return;
+  }
+
+  const statusRow = el("div", "menu-row", c);
+  el("label", "", statusRow).textContent = "Enable MIDI input";
+  const toggle = el("button", MidiInput.isEnabled() ? "on" : "", statusRow);
+  toggle.textContent = MidiInput.isEnabled() ? "Enabled" : "Disabled";
+
+  const deviceRow = el("div", "menu-row", c);
+  el("label", "", deviceRow).textContent = "Input device";
+  const deviceBtn = el("button", "", deviceRow);
+
+  const chanRow = el("div", "menu-row", c);
+  el("label", "", chanRow).textContent = "MIDI channel";
+  const chanBtn = el("button", "", chanRow);
+
+  const rescanRow = el("div", "menu-row", c);
+  const rescanBtn = el("button", "", rescanRow); rescanBtn.textContent = "Rescan devices";
+
+  const deviceLabel = () => {
+    const devs = MidiInput.listDevices();
+    const selId = MidiInput.getSelectedId();
+    if (!devs.length) return "No MIDI devices detected";
+    const sel = devs.find(d => d.id === selId);
+    return sel ? sel.name : "All devices";
+  };
+  const chanLabel = () => {
+    const ch = MidiInput.getChannel();
+    return ch === "all" ? "All channels" : `Channel ${Number(ch) + 1}`;
+  };
+  const refresh = () => {
+    deviceBtn.textContent = deviceLabel();
+    chanBtn.textContent = chanLabel();
+  };
+  refresh();
+  MidiInput.onDevicesChanged = refresh;
+
+  toggle.addEventListener("click", async () => {
+    if (MidiInput.isEnabled()) {
+      MidiInput.disable();
+      toggle.textContent = "Disabled"; toggle.classList.remove("on");
+    } else {
+      const ok = await MidiInput.enable();
+      toggle.textContent = ok ? "Enabled" : "Disabled";
+      toggle.classList.toggle("on", ok);
+      if (!ok) showToast("Could not access MIDI devices (permission denied?)", true);
+      refresh();
+    }
+  });
+
+  deviceBtn.addEventListener("click", () => {
+    const devs = MidiInput.listDevices();
+    const names = ["All devices", ...devs.map(d => d.name)];
+    const selId = MidiInput.getSelectedId();
+    const selIdx = selId ? (devs.findIndex(d => d.id === selId) + 1) : 0;
+    pickFromList("MIDI INPUT DEVICE", names, selIdx, (i) => {
+      MidiInput.setSelectedId(i === 0 ? "" : devs[i - 1].id);
+      refresh();
+    });
+  });
+
+  chanBtn.addEventListener("click", () => {
+    const names = ["All channels", ...Array.from({ length: 16 }, (_, i) => `Channel ${i + 1}`)];
+    const cur = MidiInput.getChannel();
+    const selIdx = cur === "all" ? 0 : Number(cur) + 1;
+    pickFromList("MIDI CHANNEL", names, selIdx, (i) => {
+      MidiInput.setChannel(i === 0 ? "all" : i - 1);
+      refresh();
+    });
+  });
+
+  rescanBtn.addEventListener("click", () => { MidiInput._refreshDeviceList(); refresh(); });
 }
 
 /* ---------------- notes ---------------- */
