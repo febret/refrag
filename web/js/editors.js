@@ -903,7 +903,9 @@ function renderSequencer(mv) {
 }
 
 function pickPatternFor(slot, m, onPick) {
+  const legend = m.type === "sampler" ? "green = has a sample assigned" : "green = has notes";
   showModal("SELECT PATTERN — " + m.name, (b) => {
+    el("div", "menu-row", b).textContent = legend;
     BANK_NAMES.forEach((bn, bi) => {
       const row = el("div", "menu-row", b);
       el("label", "", row).textContent = "Bank " + bn;
@@ -911,7 +913,8 @@ function pickPatternFor(slot, m, onPick) {
       for (let i = 0; i < 16; i++) {
         const bt = el("button", "", grid);
         bt.textContent = i + 1;
-        const has = (m.patterns[bn + (i + 1)]?.notes?.length || 0) > 0;
+        const pat = m.patterns[bn + (i + 1)];
+        const has = m.type === "sampler" ? !!pat?.sampler?.sample : (pat?.notes?.length || 0) > 0;
         bt.style.color = has ? "#7be87b" : "#778";
         bt.addEventListener("click", () => { closeModal(); onPick(bi, i); });
       }

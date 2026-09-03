@@ -118,6 +118,29 @@ function applyEcho(op) {
     else if (op.op === "set_harmonic") d.machines[op.slot][op.table][op.index] = op.value;
     else if (op.op === "set_sample_param" && !["add", "remove", "select"].includes(op.param))
       d.machines[op.slot].samples[op.index][op.param] = op.value;
+    else if (op.op === "set_sampler_param") {
+      // Mirror the server's create-on-write behavior (get_pattern(...,
+      // create=True) / setdefault("sampler", ...)) so echoes for a
+      // pattern/envelope that didn't exist locally yet still land
+      // instead of being silently dropped. op.value is already the
+      // server's canonical clamped value.
+      const mach = d.machines[op.slot];
+      if (mach) {
+        let pat = mach.patterns[op.key];
+        if (!pat) {
+          pat = { length: 1, notes: [], sampler: defaultSamplerSettings() };
+          mach.patterns[op.key] = pat;
+        } else if (!pat.sampler) {
+          pat.sampler = defaultSamplerSettings();
+        }
+        if (op.envelope) {
+          const env = pat.sampler.envelopes[op.envelope];
+          if (env) env[op.param] = op.value;
+        } else {
+          pat.sampler[op.param] = op.value;
+        }
+      }
+    }
   } catch (e) { /* stale echo */ }
   // update widget positions on the open view
   if (window._echoRefresh) window._echoRefresh(op);
@@ -176,7 +199,10 @@ function renderAll() {
       return;
     }
     renderMachine(mv, v.slot, m);
-    if (App.editorOpen[v.slot]) renderPatternEditor(mv, v.slot, m);
+    if (App.editorOpen[v.slot]) {
+      if (m.type === "sampler") renderSamplerEditor(mv, v.slot, m);
+      else renderPatternEditor(mv, v.slot, m);
+    }
   } else if (v.kind === "fx") renderEffectsRack(mv);
   else if (v.kind === "mixer") renderMixer(mv);
   else if (v.kind === "master") renderMaster(mv);

@@ -363,6 +363,100 @@ void parse_pcm_zones(const py::handle &obj, MachineSpec *spec) {
     }
 }
 
+// `has_depth` is false for the volume envelope, whose shape drives gain
+// directly instead of a bipolar modulation depth.
+SamplerEnvelope parse_sampler_envelope(const py::handle &obj, bool has_depth, float depth_lo,
+                                       float depth_hi) {
+    SamplerEnvelope env;
+    Params p(obj);
+    env.attack = clampf(p.f("attack", 0.0f), 0.0f, 1.0f);
+    env.decay = clampf(p.f("decay", 0.0f), 0.0f, 1.0f);
+    env.sustain = clampf(p.f("sustain", 1.0f), 0.0f, 1.0f);
+    env.release = clampf(p.f("release", 0.0f), 0.0f, 1.0f);
+    double total = static_cast<double>(env.attack) + env.decay + env.release;
+    if (total > 1.0) {
+        double scale = 1.0 / total;
+        env.attack = static_cast<float>(env.attack * scale);
+        env.decay = static_cast<float>(env.decay * scale);
+        env.release = static_cast<float>(env.release * scale);
+    }
+    if (has_depth) {
+        env.depth = clampf(p.f("depth", 0.0f), depth_lo, depth_hi);
+    }
+    return env;
+}
+
+// Sampler pads are keyed by pattern id ("A1".."D16"), so each mapping entry
+// must be converted to its dense native bank index.
+int sampler_slot_index(const py::handle &key_obj) {
+    if (!py::isinstance<py::str>(key_obj)) {
+        return -1;
+    }
+    const std::string key = key_obj.cast<std::string>();
+    if (key.size() < 2 || key.size() > 3) {
+        return -1;
+    }
+    const std::size_t bank = std::string("ABCD").find(key[0]);
+    if (bank == std::string::npos) {
+        return -1;
+    }
+    int pattern = 0;
+    for (std::size_t i = 1; i < key.size(); ++i) {
+        if (key[i] < '0' || key[i] > '9') {
+            return -1;
+        }
+        pattern = pattern * 10 + (key[i] - '0');
+    }
+    // Canonical spelling keeps malformed aliases such as A01 out of the
+    // native bank, matching the server's pattern-key validation.
+    if (key != std::string(1, "ABCD"[bank]) + std::to_string(pattern)) {
+        return -1;
+    }
+    return pattern >= 1 && pattern <= 16 ? static_cast<int>(bank) * 16 + pattern - 1 : -1;
+}
+
+void parse_sampler_slots(const py::handle &patterns, MachineSpec *spec) {
+    spec->sampler_slots.fill(SamplerSlot{});
+    if (!py::isinstance<py::dict>(patterns)) {
+        return;
+    }
+    for (const auto &entry : py::reinterpret_borrow<py::dict>(patterns)) {
+        const int index = sampler_slot_index(entry.first);
+        if (index < 0 || !entry.second || entry.second.is_none()) {
+            continue;
+        }
+        py::handle pat = entry.second;
+        SamplerSlot slot;
+        Params pat_params(pat);
+        int length = pat_params.i("length", 1);
+        slot.length = (length == 1 || length == 2 || length == 4 || length == 8) ? length : 1;
+        py::object conf = get_item(pat, "sampler");
+        if (conf && !conf.is_none()) {
+            slot.sample = as_string(get_item(conf, "sample"), "sampler pad sample");
+            Params sp(conf);
+            slot.start = clampf(sp.f("start", 0.0f), 0.0f, 1.0f);
+            slot.end = clampf(sp.f("end", 1.0f), 0.0f, 1.0f);
+            if (slot.end <= slot.start) {
+                slot.start = 0.0f;
+                slot.end = 1.0f;
+            }
+            slot.gain = clampf(sp.f("gain", 1.0f), 0.0f, 16.0f);
+            slot.tone = clampf(sp.f("tone", 0.0f), -1.0f, 1.0f);
+            slot.bass = clampf(sp.f("bass", 0.0f), -12.0f, 12.0f);
+            slot.mid = clampf(sp.f("mid", 0.0f), -12.0f, 12.0f);
+            slot.high = clampf(sp.f("high", 0.0f), -12.0f, 12.0f);
+            slot.distortion = clampf(sp.f("distortion", 0.0f), 0.0f, 1.0f);
+            slot.pitch = clampf(sp.f("pitch", 0.0f), -24.0f, 24.0f);
+            py::object envs = get_item(conf, "envelopes");
+            slot.vol_env = parse_sampler_envelope(get_item(envs, "volume"), false, 0.0f, 0.0f);
+            slot.tone_env = parse_sampler_envelope(get_item(envs, "tone"), true, -1.0f, 1.0f);
+            slot.dist_env = parse_sampler_envelope(get_item(envs, "distortion"), true, -1.0f, 1.0f);
+            slot.pitch_env = parse_sampler_envelope(get_item(envs, "pitch"), true, -24.0f, 24.0f);
+        }
+        spec->sampler_slots[static_cast<std::size_t>(index)] = std::move(slot);
+    }
+}
+
 void parse_modulators(const py::handle &obj, MachineSpec *spec) {
     spec->modulators.clear();
     if (!obj || obj.is_none()) {
@@ -468,6 +562,10 @@ MachineSpec parse_machine(const py::handle &obj) {
     case MachineKind::PCMSynth:
         parse_pcm(params, &spec.pcm);
         parse_pcm_zones(get_item(obj, "samples"), &spec);
+        break;
+    case MachineKind::Sampler:
+        spec.sampler.volume = params.f("volume", 1.0f);
+        parse_sampler_slots(get_item(obj, "patterns"), &spec);
         break;
     case MachineKind::BassLine:
         parse_bassline(params, &spec.bass);

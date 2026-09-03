@@ -11,6 +11,7 @@ namespace refrag {
 enum class MachineKind {
     SubSynth,
     PCMSynth,
+    Sampler,
     BassLine,
     BeatBox,
     PadSynth,
@@ -22,7 +23,7 @@ enum class MachineKind {
     KSSynth,
 };
 
-// Returns false when the name is not one of the eleven machine families.
+// Returns false when the name is not one of the twelve machine families.
 bool machine_kind_from_string(const std::string &name, MachineKind *out);
 
 // --- per family parameter blocks -------------------------------------------
@@ -90,6 +91,45 @@ struct PcmZone {
     int mode = 0;
     float start = 0.0f;
     float end = 1.0f;
+};
+
+// One Sampler modulation envelope.  `attack`/`decay`/`release` are fractions
+// of the voice's fixed audible span (they must sum to <= 1, leaving the
+// remainder for the flat `sustain` plateau); `sustain` is a level, not a
+// time.  `depth` is unused for the volume envelope (its shape drives gain
+// directly) and holds the bipolar modulation range for tone/distortion/pitch.
+struct SamplerEnvelope {
+    float attack = 0.0f;
+    float decay = 0.0f;
+    float sustain = 1.0f;
+    float release = 0.0f;
+    float depth = 0.0f;
+};
+
+// Per-pattern-slot pad configuration for the Sampler machine.  One of these
+// lives at each of the 64 bank*16+pattern indices; `length` mirrors the
+// owning pattern's measure count so the render path can size the audible
+// span without touching Python.
+struct SamplerSlot {
+    std::string sample;
+    float start = 0.0f;
+    float end = 1.0f;
+    float gain = 1.0f;
+    float tone = 0.0f;
+    float bass = 0.0f;
+    float mid = 0.0f;
+    float high = 0.0f;
+    float distortion = 0.0f;
+    float pitch = 0.0f;
+    int length = 1;  // pattern length in measures (1, 2, 4 or 8)
+    SamplerEnvelope vol_env{};
+    SamplerEnvelope tone_env{};
+    SamplerEnvelope dist_env{};
+    SamplerEnvelope pitch_env{};
+};
+
+struct SamplerParams {
+    float volume = 1.0f;
 };
 
 struct BassLineParams {
@@ -291,6 +331,9 @@ struct ModularParams {
 
 // --- machine ---------------------------------------------------------------
 
+// Number of addressable Sampler pads: 4 banks (A-D) of 16 patterns each.
+inline constexpr int kSamplerSlots = 64;
+
 struct MachineSpec {
     MachineKind kind = MachineKind::SubSynth;
     int poly = 8;
@@ -300,6 +343,7 @@ struct MachineSpec {
 
     SubSynthParams sub{};
     PCMSynthParams pcm{};
+    SamplerParams sampler{};
     BassLineParams bass{};
     BeatBoxParams beat{};
     PadSynthParams pad{};
@@ -312,6 +356,7 @@ struct MachineSpec {
 
     std::vector<BeatBoxChannel> channels;
     std::vector<PcmZone> zones;
+    std::array<SamplerSlot, kSamplerSlots> sampler_slots{};
     std::vector<VocoderModulator> modulators;
     int mod_sel = 0;
 

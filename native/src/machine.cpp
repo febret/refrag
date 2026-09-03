@@ -154,6 +154,9 @@ void MachineEngine::note_on(int note, float vel, int offset, int flags) {
     case MachineKind::PCMSynth:
         note_on_pcmsynth(note, vel, offset, flags);
         return;
+    case MachineKind::Sampler:
+        note_on_sampler(note, vel, offset, flags);
+        return;
     case MachineKind::Vocoder:
         note_on_vocoder(note, vel, offset, flags);
         return;
@@ -213,13 +216,26 @@ void MachineEngine::note_off(int note, int offset) {
     }
     if (victim != nullptr) {
         victim->released_at = victim->t + std::max(0, offset);
+        // Sampler ignores released_at (its span is fixed at note-on); route
+        // note_off through the same short-fade stop_at mechanism note_on
+        // uses to choke a voice, so pointerup/seek/stop/reset actually mute
+        // it instead of leaving it to play out its full audible span.
+        if (spec_.kind == MachineKind::Sampler && victim->stop_at < 0) {
+            victim->stop_at = victim->t + std::max(0, offset);
+        }
     }
 }
 
 void MachineEngine::all_off() {
     for (auto &v : voices_) {
-        if (!v.dead && v.released_at < 0) {
+        if (v.dead) {
+            continue;
+        }
+        if (v.released_at < 0) {
             v.released_at = v.t;
+        }
+        if (spec_.kind == MachineKind::Sampler && v.stop_at < 0) {
+            v.stop_at = v.t;
         }
     }
 }
@@ -283,6 +299,9 @@ void MachineEngine::render(float *l, float *r, std::size_t n, const RenderContex
         break;
     case MachineKind::PCMSynth:
         render_pcmsynth(l, r, n);
+        break;
+    case MachineKind::Sampler:
+        render_sampler(l, r, n, ctx);
         break;
     case MachineKind::BassLine:
         render_bassline(l, r, n);
@@ -628,6 +647,203 @@ void MachineEngine::render_pcmsynth(float *l, float *r, std::size_t n) {
             l[i] = invert ? l[i] - scratch_a_[i] : scratch_a_[i];
             r[i] = invert ? r[i] - scratch_b_[i] : scratch_b_[i];
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Sampler: one-shot pattern-slot playback with a fixed audible span
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Fraction-of-span envelope shape.  `frac` is elapsed/total (0..1); `attack`,
+// `decay` and `release` are fractions of that same span and are guaranteed by
+// the parser to sum to <= 1, so the flat `sustain` plateau (and, for release,
+// the point it starts from) never go negative.  Release always reaches zero
+// exactly at frac == 1 regardless of how much of the span it was given.
+double sampler_env_level(double frac, double attack, double decay, double sustain,
+                          double release) {
+    frac = clampd(frac, 0.0, 1.0);
+    if (attack > 0.0 && frac < attack) {
+        return frac / attack;
+    }
+    double decay_end = attack + decay;
+    if (decay > 0.0 && frac < decay_end) {
+        return 1.0 - (1.0 - sustain) * (frac - attack) / decay;
+    }
+    double release_start = std::max(decay_end, 1.0 - release);
+    if (release > 0.0 && frac >= release_start) {
+        double span = std::max(1e-6, 1.0 - release_start);
+        double prog = (frac - release_start) / span;
+        return sustain * std::max(0.0, 1.0 - prog);
+    }
+    return sustain;
+}
+
+}  // namespace
+
+void MachineEngine::note_on_sampler(int note, float vel, int offset, int flags) {
+    if (note < 0 || note >= static_cast<int>(spec_.sampler_slots.size())) {
+        return;
+    }
+    const SamplerSlot &slot = spec_.sampler_slots[static_cast<std::size_t>(note)];
+    SamplePtr buf = bank_ ? bank_->get(slot.sample) : nullptr;
+    if (!buf || buf->data.size() < 2) {
+        return;
+    }
+
+    // The machine is strictly monophonic: choke whatever is still sounding
+    // with a short fade (applied in render_sampler) instead of the generic
+    // hard-cut voice stealing used elsewhere, so retriggering never clicks.
+    int cut_at = std::max(0, offset);
+    for (auto &v : voices_) {
+        if (!v.dead && v.stop_at < 0) {
+            v.stop_at = v.t + cut_at;
+        }
+    }
+
+    std::size_t crop_start = 0;
+    std::size_t crop_end = 1;
+    region_bounds(buf->data.size(), slot.start, slot.end, &crop_start, &crop_end);
+
+    Voice &v = push_voice(note, vel, offset, flags);
+    v.sample = buf;
+    v.position = static_cast<double>(crop_start);
+    v.loop_start = crop_start;
+    v.loop_end = crop_end;
+    v.rate = (buf->source_rate / sample_rate_) * std::pow(2.0, slot.pitch / 12.0);
+    v.gain = slot.gain * spec_.sampler.volume;
+    v.smp_vol_env = slot.vol_env;
+    v.smp_tone_env = slot.tone_env;
+    v.smp_dist_env = slot.dist_env;
+    v.smp_pitch_env = slot.pitch_env;
+    v.smp_tone = slot.tone;
+    v.smp_bass = slot.bass;
+    v.smp_mid = slot.mid;
+    v.smp_high = slot.high;
+    v.smp_dist = slot.distortion;
+    v.smp_pitch = slot.pitch;
+    v.smp_tilt_lp.reset(0.0f);
+    for (auto &bq : v.smp_eq) {
+        bq.reset();
+    }
+
+    // Natural duration estimate (engine frames) of the cropped region at the
+    // voice's own base playback rate; the render path caps the audible span
+    // to the pattern length once BPM is known.
+    double crop_frames =
+        static_cast<double>(crop_end > crop_start ? crop_end - crop_start : std::size_t{1});
+    v.smp_natural_frames = std::max(1.0, crop_frames / std::max(1e-6, v.rate));
+    v.smp_pattern_beats = std::max(1.0, static_cast<double>(slot.length) * 4.0);
+    v.smp_audible_frames = -1.0;  // resolved on first render, once BPM is known
+}
+
+void MachineEngine::render_sampler(float *l, float *r, std::size_t n, const RenderContext &ctx) {
+    constexpr double kDeclick = 48.0;  // frames of linear fade at hard edges
+    double bpm = ctx.bpm > 1e-6 ? ctx.bpm : 120.0;
+
+    for (auto &voice : voices_) {
+        if (voice.dead || !voice.sample) {
+            continue;
+        }
+        if (voice.smp_audible_frames < 0.0) {
+            double pattern_frames = voice.smp_pattern_beats * (60.0 / bpm) * sample_rate_;
+            voice.smp_audible_frames =
+                std::max(1.0, std::min(voice.smp_natural_frames, pattern_frames));
+        }
+        const std::vector<float> &buf = voice.sample->data;
+        double crop_hi = static_cast<double>(std::max(voice.loop_start + 1, voice.loop_end));
+        double total = voice.smp_audible_frames;
+        double pos = voice.position;
+
+        // Static per-voice 3-band EQ; Biquad::set() no-ops when the params
+        // are unchanged, so it's safe to call every block.
+        voice.smp_eq[0].set(FilterType::LowShelf, 250.0, 0.7, sample_rate_, voice.smp_bass);
+        voice.smp_eq[1].set(FilterType::Peak, 1200.0, 0.8, sample_rate_, voice.smp_mid);
+        voice.smp_eq[2].set(FilterType::HighShelf, 5000.0, 0.7, sample_rate_, voice.smp_high);
+
+        for (std::size_t i = 0; i < n; ++i) {
+            std::int64_t t = voice.t + static_cast<std::int64_t>(i);
+            if (t < voice.start_offset) {
+                continue;
+            }
+            double local = static_cast<double>(t - voice.start_offset);
+            if (local >= total || pos >= crop_hi) {
+                voice.dead = true;
+                break;
+            }
+            double frac = local / total;
+            double vol_env =
+                sampler_env_level(frac, voice.smp_vol_env.attack, voice.smp_vol_env.decay,
+                                   voice.smp_vol_env.sustain, voice.smp_vol_env.release);
+            double tone_mod =
+                sampler_env_level(frac, voice.smp_tone_env.attack, voice.smp_tone_env.decay,
+                                   voice.smp_tone_env.sustain, voice.smp_tone_env.release) *
+                voice.smp_tone_env.depth;
+            double dist_mod =
+                sampler_env_level(frac, voice.smp_dist_env.attack, voice.smp_dist_env.decay,
+                                   voice.smp_dist_env.sustain, voice.smp_dist_env.release) *
+                voice.smp_dist_env.depth;
+            double pitch_mod =
+                sampler_env_level(frac, voice.smp_pitch_env.attack, voice.smp_pitch_env.decay,
+                                   voice.smp_pitch_env.sustain, voice.smp_pitch_env.release) *
+                voice.smp_pitch_env.depth;
+
+            // De-click at the required edges: sample-crop onset, the hard
+            // span boundary (crop exhaustion or pattern length, whichever is
+            // sooner — including crop exhaustion arriving early because a
+            // pitch envelope sped up playback beyond the base-rate estimate),
+            // and an early choke/preview stop. Onset must never reach exactly
+            // zero (that would immediately kill a just-triggered voice), so
+            // it ramps from a nonzero first sample.
+            double declick = 1.0;
+            if (local < kDeclick) {
+                declick *= (local + 1.0) / kDeclick;
+            }
+            double remaining_time = total - local;
+            if (remaining_time < kDeclick) {
+                declick *= std::max(0.0, remaining_time / kDeclick);
+            }
+            double rate = voice.rate * std::pow(2.0, pitch_mod / 12.0);
+            double remaining_source = (crop_hi - pos) / std::max(1e-9, rate);
+            if (remaining_source < kDeclick) {
+                declick *= std::max(0.0, remaining_source / kDeclick);
+            }
+            bool stop_ended = false;
+            if (voice.stop_at >= 0 && t >= voice.stop_at) {
+                double since_stop = static_cast<double>(t - voice.stop_at);
+                double stop_fade = std::max(0.0, 1.0 - since_stop / kDeclick);
+                declick *= stop_fade;
+                stop_ended = stop_fade <= 0.0;
+            }
+
+            float dry = fetch_linear(buf, pos);
+            float low = voice.smp_tilt_lp.process_one(dry, 0.985f);
+            float high = dry - low;
+            float tone = clampf(voice.smp_tone + static_cast<float>(tone_mod), -1.0f, 1.0f);
+            float tilted = dry + tone * (high - low) * 0.6f;
+
+            float amount = clampf(voice.smp_dist + static_cast<float>(dist_mod), 0.0f, 1.0f);
+            // distort_sample's tanh program isn't transparent at amount == 0
+            // (it still applies a fixed drive/normalisation), so bypass the
+            // waveshaper entirely when there's effectively no distortion.
+            float shaped = amount > 1e-3f ? distort_sample(tilted, 0, amount) : tilted;
+
+            float eq = voice.smp_eq[0].process_one(shaped);
+            eq = voice.smp_eq[1].process_one(eq);
+            eq = voice.smp_eq[2].process_one(eq);
+
+            float gain = static_cast<float>(vol_env * declick) * voice.gain * voice.vel;
+            mix_centered(l, r, i, eq, gain, 0.0f);
+
+            pos += rate;
+            if (stop_ended) {
+                voice.dead = true;
+                break;
+            }
+        }
+        voice.position = pos;
+        voice.t += static_cast<std::int64_t>(n);
     }
 }
 

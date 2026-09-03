@@ -1,4 +1,4 @@
-// Machine voices and the per-machine render engine.  Every one of the eleven
+// Machine voices and the per-machine render engine.  Every one of the twelve
 // families is rendered here; nothing in this file touches Python.
 #pragma once
 
@@ -51,7 +51,7 @@ struct Voice {
     double glide_pos = 0.0;   // bassline glide progress
     double aux = 0.0;         // per-machine scratch accumulator
 
-    // Sample playback (BeatBox / PCMSynth).
+    // Sample playback (BeatBox / PCMSynth / Sampler).
     SamplePtr sample;
     double position = 0.0;
     double rate = 1.0;
@@ -67,6 +67,26 @@ struct Voice {
     std::size_t release_end = 1;
     PcmLoop loop_kind = PcmLoop::None;
     bool intro_loop = false;
+
+    // Sampler: config snapshotted at note-on (loop_start/loop_end hold the
+    // crop bounds, `rate` the base pitch-only playback ratio).  The fixed
+    // audible span can't be resolved until a RenderContext supplies BPM, so
+    // it is cached lazily the first time the voice is rendered.
+    SamplerEnvelope smp_vol_env{};
+    SamplerEnvelope smp_tone_env{};
+    SamplerEnvelope smp_dist_env{};
+    SamplerEnvelope smp_pitch_env{};
+    float smp_tone = 0.0f;
+    float smp_bass = 0.0f;
+    float smp_mid = 0.0f;
+    float smp_high = 0.0f;
+    float smp_dist = 0.0f;
+    float smp_pitch = 0.0f;
+    double smp_natural_frames = 0.0;  // cropped duration estimate at note-on
+    double smp_pattern_beats = 4.0;   // pattern length in beats (measures*4)
+    double smp_audible_frames = -1.0; // resolved lazily once BPM is known
+    OnePole smp_tilt_lp;
+    std::array<Biquad, 3> smp_eq;     // bass shelf, mid peak, high shelf
 
     // Vocoder carrier.
     int mod_slot = 0;
@@ -133,6 +153,7 @@ class MachineEngine {
 
     void render_subsynth(float *l, float *r, std::size_t n);
     void render_pcmsynth(float *l, float *r, std::size_t n);
+    void render_sampler(float *l, float *r, std::size_t n, const RenderContext &ctx);
     void render_bassline(float *l, float *r, std::size_t n);
     void render_beatbox(float *l, float *r, std::size_t n);
     void render_padsynth(float *l, float *r, std::size_t n);
@@ -145,6 +166,7 @@ class MachineEngine {
 
     void note_on_beatbox(int note, float vel, int offset, int flags);
     void note_on_pcmsynth(int note, float vel, int offset, int flags);
+    void note_on_sampler(int note, float vel, int offset, int flags);
     void note_on_vocoder(int note, float vel, int offset, int flags);
     void note_on_kssynth(Voice &v);
 

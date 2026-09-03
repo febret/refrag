@@ -3,12 +3,12 @@
 "use strict";
 
 function renderMachine(mv, slot, m) {
-  const panel = el("div", "machine", mv);
+  const panel = el("div", "machine" + (m.type === "sampler" ? " sampler-machine" : ""), mv);
   buildMachineHead(panel, slot, m);
   const body = el("div", "machine-body", panel);
   const builder = MACHINE_BUILDERS[m.type] || buildGenericPanel;
   builder(body, slot, m);
-  if (m.type !== "beatbox") buildKeyboardFooter(panel, slot, m);
+  if (m.type !== "beatbox" && m.type !== "sampler") buildKeyboardFooter(panel, slot, m);
 }
 
 /* ------------ shared header (label, LED, preset LCD, M/S, pattern btn) ---- */
@@ -44,7 +44,7 @@ function buildMachineHead(panel, slot, m) {
 
   el("div", "spacer", head);
 
-  if (m.type !== "beatbox") {
+  if (m.type !== "beatbox" && m.type !== "sampler") {
     const poly = el("div", "poly", head);
     const minus = el("button", "", poly); minus.textContent = "−";
     const pl = el("div", "poly-lcd", poly); pl.textContent = m.poly;
@@ -65,11 +65,40 @@ function buildMachineHead(panel, slot, m) {
   head.appendChild(ms);
 
   const patBtn = el("button", "pattern-btn" + (App.editorOpen[slot] ? " on" : ""), head);
-  patBtn.textContent = "PATTERN EDITOR";
+  patBtn.textContent = m.type === "sampler" ? "SAMPLE EDITOR" : "PATTERN EDITOR";
   patBtn.addEventListener("click", () => {
     App.editorOpen[slot] = !App.editorOpen[slot];
     renderAll();
   });
+
+  if (m.type !== "sampler" && m.type !== "samples") {
+    const bakeBtn = el("button", "pattern-btn", head);
+    bakeBtn.textContent = "BAKE";
+    bakeBtn.title = "Bake patterns to sampler";
+    bakeBtn.addEventListener("click", () => {
+      if (m.sampler_slot != null) {
+        send({ op: "bake_samples", slot, target_slot: m.sampler_slot });
+        showToast("Baking samples...");
+      } else {
+        const freeSlots = [];
+        App.doc.machines.forEach((sm, i) => {
+          if (sm === null) freeSlots.push(i);
+        });
+        if (freeSlots.length === 0) {
+          showToast("No free slots for sampler", true);
+          return;
+        }
+        pickFromList("SELECT SAMPLER SLOT", freeSlots.map(s => "Slot " + (s + 1)),
+          -1, (i) => {
+            const targetSlot = freeSlots[i];
+            send({ op: "set_machine_prop", slot, prop: "sampler_slot", value: targetSlot });
+            send({ op: "add_machine", slot: targetSlot, mtype: "sampler", name: m.name + " (Baked)" });
+            send({ op: "bake_samples", slot, target_slot: targetSlot });
+            showToast("Baking samples...");
+          });
+      }
+    });
+  }
 }
 
 function buildKeyboardFooter(panel, slot, m) {
@@ -115,6 +144,7 @@ function buildGenericPanel(body, slot, m) {
 const MACHINE_BUILDERS = {
   subsynth: buildSubSynth,
   pcmsynth: buildPCMSynth,
+  sampler: buildSampler,
   bassline: buildBassLine,
   beatbox: buildBeatBox,
   padsynth: buildPadSynth,

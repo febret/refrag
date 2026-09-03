@@ -152,12 +152,11 @@ Open the App Menu → **Song** tab:
 
 Every machine shares a common header: the **machine label** (click to
 rename), a **NOTE ON LED**, the **preset LCD** (click to load a preset, 💾 to
-save one — presets are stored per machine type in `data/presets/`, and every
-machine ships with 5–10 factory starter presets), a
-**polyphony** selector, **Mute/Solo** buttons linked to the mixer, and the
-**PATTERN EDITOR** toggle. A two-octave **preview keyboard** with octave
-up/down buttons sits at the bottom of every machine (except the BeatBox,
-which has per-channel preview buttons).
+save one — presets are stored per machine type in `data/presets/`),
+**Mute/Solo** buttons linked to the mixer, and an editor toggle. Melodic
+machines also have a **polyphony** selector and a two-octave preview keyboard.
+BeatBox uses per-channel preview buttons instead; Sampler uses a sample preview
+button and has neither a keyboard nor a polyphony selector.
 
 ### SubSynth
 
@@ -192,6 +191,30 @@ pickers include *Upload file* and *Record* actions (see
 [Using your own samples](#using-your-own-samples)).
 A classic synth section — filter with ADSR, LFO (pitch/cutoff/volume),
 octave/semi/cent tuning and a volume ADSR — further shapes playback.
+
+### Sampler
+
+Sampler assigns one sound file to each pattern slot (A1 through D16). Open
+**SAMPLE EDITOR** to choose a factory or uploaded sample, set the pattern to
+1, 2, 4 or 8 measures, and edit it non-destructively. The waveform view has
+draggable crop handles; excluded audio is shaded. **Normalize** analyzes the
+selected crop and stores a safe per-pattern gain without rewriting the shared
+WAV file.
+
+Static controls set level, pitch, tone/brightness, distortion, and bass, mid,
+and high gain. Four fixed-span ADSRs shape volume, tone, distortion, and pitch.
+Attack and decay run from the start, sustain holds through the middle, and
+release ends at the audible end. The tone, distortion, and pitch envelopes
+also have signed depth controls.
+
+Samples play at their natural speed. A short sample ends naturally; a long
+sample stops at the pattern boundary and retriggers on the next loop. Sampler
+patterns can be placed in the Song Sequencer or launched and queued in the
+Live Performance Looper exactly like note patterns. Sampler presets save and
+restore the complete 64-pattern sample bank, including crops, processing, and
+envelopes. **IMPORT FILES...** uploads
+multiple files in order and assigns them to consecutive slots of the current
+16-pattern bank.
 
 ### BassLine
 
@@ -420,8 +443,8 @@ machine.
   pattern boundaries. Press the same pad multiple times to queue repeats.
 - Pattern lengths are independent, so a one-measure drum pattern can switch
   before an eight-measure pad pattern. Filled pads have a note indicator, but
-  empty patterns are also launchable and can be used as a deliberate silent
-  cycle.
+  for Sampler a pad is filled when it has an assigned sample. Empty patterns
+  are also launchable and can be used as a deliberate silent cycle.
 - **CLR** cancels the entire queued launch list for that machine.
 - Each machine row has **QUEUE MODE** and **RANDOM MODE**:
   - **Queue** plays exactly what you queue.
@@ -442,7 +465,8 @@ machine.
   - a transpose amount (-24 to +24 semitones), and
   - a loop duration (1-4 pattern loops).
   Steps advance on that machine's pattern boundaries and wrap continuously.
-  Beatbox uses fixed drum mappings and is not transposed.
+  BeatBox uses fixed drum mappings and Sampler uses per-pattern pitch controls,
+  so neither machine is transposed here.
 
 Looper actions, mixer changes, active/queued pads, and launch timing are shared
 with everyone connected to the room.
@@ -505,7 +529,7 @@ setup independently.
 
 ![Pattern editor](img/pattern-editor.png)
 
-Every machine has its own editor, opened with the **PATTERN EDITOR** button.
+Most machines use the note editor opened with the **PATTERN EDITOR** button.
 It edits the machine's *current* pattern live — during playback, added and
 moved notes take effect on the next pass of the loop, for every listener in
 the room.
@@ -527,6 +551,9 @@ the room.
   in time by a 16th, or transpose it by an octave.
 - The BeatBox editor is a **drum grid** instead: one row per channel, one
   click per 16th step to toggle a hit.
+- Sampler opens the dedicated **SAMPLE EDITOR** described in the machine
+  reference. Its green pattern numbers indicate assigned samples rather than
+  notes, and it has no piano roll, live note recording, Flourish, or AI Match.
 
 ### Live recording
 
@@ -576,7 +603,7 @@ As with recording samples, microphone capture requires HTTPS or
 
 ## Using your own samples
 
-The PCMSynth, BeatBox and Vocoder all open the same **sample picker**
+The PCMSynth, Sampler, BeatBox and Vocoder all open the same **sample picker**
 (![phone sample picker](img/phone-sample-picker.png)) whenever you choose a
 sample. Besides the factory library and your previous uploads (marked ★), the
 picker offers two actions that work from a phone as well as a desktop:
@@ -595,9 +622,9 @@ picker offers two actions that work from a phone as well as a desktop:
   instead.
 
 Uploaded samples are stored on the server in `data/samples/` and appear in
-all sample pickers: PCMSynth zones (**SAMPLE** / **+ZONE**), BeatBox channel
-LCDs, and the Vocoder's **LOAD WAV** modulator button. The same actions are
-also available from the App Menu → Options tab.
+all sample pickers: PCMSynth zones (**SAMPLE** / **+ZONE**), Sampler pattern
+slots, BeatBox channel LCDs, and the Vocoder's **LOAD WAV** modulator button.
+The same actions are also available from the App Menu → Options tab.
 
 ---
 

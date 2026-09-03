@@ -167,7 +167,7 @@ function renderLooper(mv) {
   const legend = el("div", "looper-legend", top);
   legend.innerHTML =
     "<span><i class='live'></i>LIVE</span><span><i class='queued'></i>QUEUED</span>" +
-    "<span><i class='filled'></i>HAS NOTES</span>";
+    "<span><i class='filled'></i>HAS CONTENT</span>";
 
   const state = App._looperState = App._looperState || { banks: {}, transposeCollapsed: {} };
   const machines = App.doc.machines
@@ -245,11 +245,13 @@ function renderLooper(mv) {
       send({ op: "looper_clear_queue", slot });
     });
     const pads = el("div", "looper-pads", launchBox);
+    const patterns = m.patterns || {};
     for (let pattern = 0; pattern < 16; pattern++) {
       const key = looperPatternKey(browsedBank, pattern);
-      const pat = m.patterns[key];
+      const pat = patterns[key];
+      const filled = m.type === "sampler" ? !!pat?.sampler?.sample : !!pat?.notes?.length;
       const pad = el("button", "looper-pad" +
-        (pat?.notes?.length ? " filled" : " empty"), pads);
+        (filled ? " filled" : " empty"), pads);
       pad.type = "button";
       pad.dataset.bank = browsedBank;
       pad.dataset.pattern = pattern;
@@ -361,19 +363,23 @@ function renderLooper(mv) {
     }
 
     const isBeatbox = m.type === "beatbox";
-    const isCollapsed = isBeatbox ? true : !!(state.transposeCollapsed[slot] ?? true);
+    const isSampler = m.type === "sampler";
+    const noTranspose = isBeatbox || isSampler;
+    const isCollapsed = noTranspose ? true : !!(state.transposeCollapsed[slot] ?? true);
     if (isCollapsed) row.classList.add("transpose-collapsed");
 
     const transpose = el("div",
-      "looper-transpose" + (isBeatbox ? " disabled" : ""),
+      "looper-transpose" + (noTranspose ? " disabled" : ""),
       row);
     transpose.dataset.transposeSlot = slot;
 
-    if (isBeatbox) {
-      // Beatbox: static narrow strip, no toggle
+    if (noTranspose) {
+      // Beatbox / Sampler: static narrow strip, no toggle (both machines
+      // ignore transpose — sampler previews raw pattern slots).
       const strip = el("div", "looper-transpose-strip", transpose);
       el("span", "looper-transpose-strip-label", strip).textContent = "LIVE TRANSPOSE";
-      el("div", "looper-transpose-strip-value", strip).textContent = "DRUM MAP";
+      el("div", "looper-transpose-strip-value", strip).textContent =
+        isSampler ? "SAMPLE MAP" : "DRUM MAP";
     } else {
       const steps = ensureTransposeSteps(m);
       const liveStep = (Number(live.transposeStep) || 0) % 4;
@@ -610,7 +616,7 @@ function updateLooperStatus(status) {
       pip.classList.toggle("active", Number(pip.dataset.pipStep) === transposeStep);
     });
     const stripValue = row.querySelector(".looper-transpose-strip-value");
-    if (stripValue && m.type !== "beatbox") {
+    if (stripValue && m.type !== "beatbox" && m.type !== "sampler") {
       const steps = ensureTransposeSteps(m);
       stripValue.textContent = formatTransposeLabel(steps[transposeStep].transpose);
     }

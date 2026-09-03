@@ -73,7 +73,7 @@ restart to regenerate the self-signed certificate.
 - `server/app.py` serves the web app, room API, WebSocket, transport clock, and
   WAV export.
 - `server/state.py` owns collaborative room state and JSON persistence.
-- `native/` implements all 11 machine families, all 16 insert effects, mixer
+- `native/` implements all 12 machine families, all 16 insert effects, mixer
   strips, sends, and the master chain in the `refrag_engine` C++ extension.
 - `server/engine.py` orchestrates transport, sequencing, automation, and one
   native room-graph render call per block; `server/synth.py` manages the native

@@ -9,6 +9,7 @@ then re-broadcast to every connected client.
 
 import copy
 import json
+import math
 import os
 import re
 import threading
@@ -32,6 +33,30 @@ SAMPLE_DIR = os.path.join(DATA_DIR, "samples")
 
 DEFAULT_BEATBOX_KIT = ["kick", "snare", "clhat", "ophat", "clap",
                        "tom_lo", "tom_hi", "crash"]
+NON_TRANSPOSE_MACHINES = {"beatbox", "sampler"}
+
+SAMPLER_PARAM_RANGES = {
+    "start": (0.0, 1.0),
+    "end": (0.0, 1.0),
+    "gain": (0.0, 16.0),
+    "tone": (-1.0, 1.0),
+    "bass": (-12.0, 12.0),
+    "mid": (-12.0, 12.0),
+    "high": (-12.0, 12.0),
+    "distortion": (0.0, 1.0),
+    "pitch": (-24.0, 24.0),
+}
+SAMPLER_ENVELOPE_RANGES = {
+    "attack": (0.0, 1.0),
+    "decay": (0.0, 1.0),
+    "sustain": (0.0, 1.0),
+    "release": (0.0, 1.0),
+}
+SAMPLER_DEPTH_RANGES = {
+    "tone": (-1.0, 1.0),
+    "distortion": (-1.0, 1.0),
+    "pitch": (-24.0, 24.0),
+}
 
 
 def _safe_name(name):
@@ -39,8 +64,117 @@ def _safe_name(name):
     return name[:48] or "untitled"
 
 
-def new_pattern():
-    return {"length": 1, "notes": []}   # length in measures; notes: [key, start, dur, vel, flags]
+def new_sampler_settings():
+    envelopes = {}
+    for name in ("volume", "tone", "distortion", "pitch"):
+        envelopes[name] = {
+            "attack": 0.0,
+            "decay": 0.0,
+            "sustain": 1.0,
+            "release": 0.0,
+        }
+        if name != "volume":
+            envelopes[name]["depth"] = 0.0
+    return {
+        "sample": "",
+        "start": 0.0,
+        "end": 1.0,
+        "gain": 1.0,
+        "tone": 0.0,
+        "bass": 0.0,
+        "mid": 0.0,
+        "high": 0.0,
+        "distortion": 0.0,
+        "pitch": 0.0,
+        "envelopes": envelopes,
+    }
+
+
+def new_pattern(mtype=None):
+    pat = {"length": 1, "notes": []}
+    if mtype == "sampler":
+        pat["sampler"] = new_sampler_settings()
+    return pat
+
+
+def _pattern_indices(key):
+    key = str(key or "")
+    if len(key) < 2 or key[0] not in BANKS:
+        return None
+    try:
+        pattern = int(key[1:]) - 1
+    except ValueError:
+        return None
+    if not 0 <= pattern < PATTERNS_PER_BANK:
+        return None
+    bank = BANKS.index(key[0])
+    return (bank, pattern) if key == BANKS[bank] + str(pattern + 1) else None
+
+
+def _bounded_float(value, lo, hi, default=None):
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(value):
+        return default
+    return max(lo, min(hi, value))
+
+
+def _normalize_sampler_envelope(name, raw):
+    raw = raw if isinstance(raw, dict) else {}
+    env = {}
+    for field, (lo, hi) in SAMPLER_ENVELOPE_RANGES.items():
+        default = 1.0 if field == "sustain" else 0.0
+        env[field] = _bounded_float(raw.get(field, default), lo, hi, default)
+    total = env["attack"] + env["decay"] + env["release"]
+    if total > 1.0:
+        scale = 1.0 / total
+        env["attack"] *= scale
+        env["decay"] *= scale
+        env["release"] *= scale
+    if name != "volume":
+        lo, hi = SAMPLER_DEPTH_RANGES[name]
+        env["depth"] = _bounded_float(raw.get("depth", 0.0), lo, hi, 0.0)
+    return env
+
+
+def _normalize_sampler_settings(raw):
+    raw = raw if isinstance(raw, dict) else {}
+    settings = new_sampler_settings()
+    settings["sample"] = _safe_name(raw.get("sample", "")) if raw.get("sample") else ""
+    for field, (lo, hi) in SAMPLER_PARAM_RANGES.items():
+        settings[field] = _bounded_float(
+            raw.get(field, settings[field]), lo, hi, settings[field])
+    if settings["end"] <= settings["start"]:
+        settings["start"], settings["end"] = 0.0, 1.0
+    raw_envs = raw.get("envelopes")
+    raw_envs = raw_envs if isinstance(raw_envs, dict) else {}
+    settings["envelopes"] = {
+        name: _normalize_sampler_envelope(name, raw_envs.get(name))
+        for name in ("volume", "tone", "distortion", "pitch")
+    }
+    return settings
+
+
+def _normalize_sampler_machine(m):
+    patterns = m.get("patterns")
+    if not isinstance(patterns, dict):
+        m["patterns"] = {}
+        return
+    for key in list(patterns):
+        if _pattern_indices(key) is None or not isinstance(patterns[key], dict):
+            continue
+        pat = patterns[key]
+        try:
+            pat["length"] = int(pat.get("length", 1))
+        except (TypeError, ValueError):
+            pat["length"] = 1
+        if pat["length"] not in (1, 2, 4, 8):
+            pat["length"] = 1
+        pat["notes"] = []
+        if "sampler" in pat:
+            pat["sampler"] = _normalize_sampler_settings(pat["sampler"])
 
 
 def _clamp_transpose(value):
@@ -121,6 +255,8 @@ def new_machine(mtype, name=None):
              "start": 0.0, "end": 1.0}
         ]
         m["sample_sel"] = 0
+    if mtype == "sampler":
+        m["octave"] = 0
     if mtype == "padsynth":
         n = spec["harmonics"]
         h1 = [1.0] + [0.0] * (n - 1)
@@ -211,6 +347,8 @@ class Room:
             if m is not None:
                 _normalize_transpose_steps(m)
                 _normalize_looper_settings(m)
+                if m.get("type") == "sampler":
+                    _normalize_sampler_machine(m)
         base["transport"]["playing"] = False
         base["transport"]["record"] = False
         with self.lock:
@@ -258,9 +396,11 @@ class Room:
 
     def get_pattern(self, m, key=None, create=False):
         key = key or self.pattern_key(m)
+        if _pattern_indices(key) is None:
+            return None
         pat = m["patterns"].get(key)
         if pat is None and create:
-            pat = new_pattern()
+            pat = new_pattern(m.get("type"))
             m["patterns"][key] = pat
         return pat
 
@@ -321,7 +461,13 @@ class Room:
         if old is None or op["mtype"] not in catalog.MACHINES:
             return False
         m = new_machine(op["mtype"])
-        m["patterns"] = old["patterns"]
+        m["patterns"] = copy.deepcopy(old["patterns"])
+        if m["type"] == "sampler":
+            _normalize_sampler_machine(m)
+        elif old["type"] == "sampler":
+            for pat in m["patterns"].values():
+                if isinstance(pat, dict):
+                    pat.pop("sampler", None)
         m["bank"], m["pattern"] = old["bank"], old["pattern"]
         m["transpose"] = _clamp_transpose(old.get("transpose", 0))
         m["transpose_steps"] = copy.deepcopy(old.get("transpose_steps", m["transpose_steps"]))
@@ -407,19 +553,175 @@ class Room:
         m["samples"][idx][op["param"]] = op["value"]
         return True
 
+    def _op_set_sampler_param(self, op):
+        m = self.machine(int(op["slot"]))
+        key = op.get("key") or (self.pattern_key(m) if m is not None else None)
+        if m is None or m.get("type") != "sampler" or _pattern_indices(key) is None:
+            return False
+        pat = self.get_pattern(m, key, create=True)
+        settings = pat.setdefault("sampler", new_sampler_settings())
+        envelope = op.get("envelope")
+        field = str(op.get("param", ""))
+        if envelope is not None:
+            envelope = str(envelope)
+            if envelope not in settings["envelopes"]:
+                return False
+            allowed = SAMPLER_ENVELOPE_RANGES
+            if envelope != "volume":
+                allowed = {**allowed, "depth": SAMPLER_DEPTH_RANGES[envelope]}
+            if field not in allowed:
+                return False
+            lo, hi = allowed[field]
+            value = _bounded_float(op.get("value"), lo, hi)
+            if value is None:
+                return False
+            if field in ("attack", "decay", "release"):
+                timing = settings["envelopes"][envelope]
+                remaining = 1.0 - sum(
+                    timing[name]
+                    for name in ("attack", "decay", "release")
+                    if name != field)
+                value = min(value, max(0.0, remaining))
+            settings["envelopes"][envelope][field] = value
+            op["value"] = value
+            return True
+        if field == "sample":
+            value = str(op.get("value") or "")
+            settings["sample"] = _safe_name(value) if value else ""
+            op["value"] = settings["sample"]
+            return True
+        if field not in SAMPLER_PARAM_RANGES:
+            return False
+        lo, hi = SAMPLER_PARAM_RANGES[field]
+        value = _bounded_float(op.get("value"), lo, hi)
+        if value is None:
+            return False
+        settings[field] = value
+        if field == "start":
+            settings["start"] = min(settings["start"], settings["end"] - 0.0001)
+        elif field == "end":
+            settings["end"] = min(
+                1.0, max(settings["end"], settings["start"] + 0.0001))
+        op["value"] = settings[field]
+        return True
+
+    def _op_set_sampler_pattern(self, op):
+        m = self.machine(int(op["slot"]))
+        key = op.get("key")
+        if (m is None or m.get("type") != "sampler" or
+                _pattern_indices(key) is None or
+                not isinstance(op.get("sampler"), dict)):
+            return False
+        try:
+            length = int(op.get("length", 1))
+        except (TypeError, ValueError):
+            return False
+        if length not in (1, 2, 4, 8):
+            return False
+        m["patterns"][key] = {
+            "length": length,
+            "notes": [],
+            "sampler": _normalize_sampler_settings(op["sampler"]),
+        }
+        return True
+
+    def _op_assign_sampler_bank(self, op):
+        m = self.machine(int(op["slot"]))
+        if m is None or m.get("type") != "sampler":
+            return False
+        try:
+            bank = int(op["bank"])
+            start = int(op.get("start", 0))
+        except (KeyError, TypeError, ValueError):
+            return False
+        names = op.get("samples")
+        if (not 0 <= bank < len(BANKS) or
+                not 0 <= start < PATTERNS_PER_BANK or
+                not isinstance(names, list) or
+                not names or len(names) > PATTERNS_PER_BANK - start):
+            return False
+        clean = []
+        for name in names:
+            if not isinstance(name, str) or not name.strip():
+                return False
+            clean.append(_safe_name(name))
+        for offset, name in enumerate(clean):
+            key = BANKS[bank] + str(start + offset + 1)
+            pat = self.get_pattern(m, key, create=True)
+            pat.setdefault("sampler", new_sampler_settings())["sample"] = name
+        return True
+
     def _op_set_machine_prop(self, op):
         m = self.machine(int(op["slot"]))
         if m is None:
             return False
         prop = op["prop"]
         if prop in ("mute", "solo", "poly", "octave", "expr_a", "expr_b",
-                    "expr_sel", "mod_sel", "width1", "width2", "preset"):
+                    "expr_sel", "mod_sel", "width1", "width2", "preset",
+                    "sampler_slot"):
             m[prop] = op["value"]
             return True
         if prop in ("harm1", "harm2") and isinstance(op["value"], list):
             m[prop] = [max(0.0, min(1.0, float(v))) for v in op["value"]]
             return True
         return False
+
+    def _op_bake_samples(self, op):
+        """Bake a machine's patterns into a linked Sampler machine.
+
+        Each pattern (A1-A16, B1-B16, etc.) becomes a sample in the sampler.
+        The source machine tracks its linked sampler via sampler_slot.
+        """
+        # Lazy imports to avoid circular dependency
+        from . import engine as eng_module
+        from . import samples as samples_module
+        source_slot = int(op.get("slot", -1))
+        target_slot = op.get("target_slot")
+        m = self.machine(source_slot)
+        if m is None or m.get("type") == "sampler":
+            return False
+        if m.get("type") == "samples":
+            return False
+        # If target_slot not provided, use existing linked sampler or fail
+        if target_slot is None:
+            target_slot = m.get("sampler_slot")
+        if target_slot is None:
+            return False
+        target_slot = int(target_slot)
+        if not 0 <= target_slot < MAX_MACHINES:
+            return False
+        target = self.machine(target_slot)
+        if target is None or target.get("type") != "sampler":
+            return False
+        # Ensure sampler_slot is tracked
+        if m.get("sampler_slot") != target_slot:
+            m["sampler_slot"] = target_slot
+        bpm = float(op.get("bpm", self.doc.get("bpm", 120.0)))
+        baked_any = False
+        for bank_idx, bank_char in enumerate(BANKS):
+            for pat_idx in range(PATTERNS_PER_BANK):
+                key = bank_char + str(pat_idx + 1)
+                pat = self.get_pattern(m, key)
+                if pat is None:
+                    continue
+                audio, sr = eng_module.render_pattern(self, source_slot, bank_idx, pat_idx, bpm)
+                if audio is None:
+                    continue
+                sample_name = f"baked_{source_slot}_{key}"
+                path = os.path.join(SAMPLE_DIR, sample_name + ".wav")
+                os.makedirs(SAMPLE_DIR, exist_ok=True)
+                samples_module.write_wav(path, audio)
+                if sample_name not in samples_module.all_names():
+                    samples_module._cache.pop(sample_name, None)
+                target_pat = self.get_pattern(target, key, create=True)
+                if "sampler" not in target_pat:
+                    target_pat["sampler"] = new_sampler_settings()
+                target_pat["sampler"]["sample"] = sample_name
+                target_pat["sampler"]["start"] = 0.0
+                target_pat["sampler"]["end"] = 1.0
+                target_pat["length"] = pat.get("length", 1)
+                baked_any = True
+        return baked_any
 
     def _op_set_harmonic(self, op):
         m = self.machine(int(op["slot"]))
@@ -631,7 +933,7 @@ class Room:
 
     def _op_set_transpose(self, op):
         m = self.machine(int(op["slot"]))
-        if m is None or m["type"] == "beatbox":
+        if m is None or m["type"] in NON_TRANSPOSE_MACHINES:
             return False
         value = _clamp_transpose(op["value"])
         _normalize_transpose_steps(m)
@@ -645,7 +947,7 @@ class Room:
 
     def _op_set_transpose_step(self, op):
         m = self.machine(int(op["slot"]))
-        if m is None or m["type"] == "beatbox":
+        if m is None or m["type"] in NON_TRANSPOSE_MACHINES:
             return False
         step_idx = int(op["step"])
         if not 0 <= step_idx < 4:
@@ -679,7 +981,7 @@ class Room:
 
     def _op_add_note(self, op):
         m = self.machine(int(op["slot"]))
-        if m is None:
+        if m is None or m.get("type") == "sampler":
             return False
         pat = self.get_pattern(m, op.get("key"), create=True)
         note = [int(op["note"]), float(op["start"]), float(op["dur"]),
@@ -693,7 +995,7 @@ class Room:
 
     def _op_update_note(self, op):
         m = self.machine(int(op["slot"]))
-        if m is None:
+        if m is None or m.get("type") == "sampler":
             return False
         pat = self.get_pattern(m, op.get("key"))
         idx = int(op["index"])
@@ -709,7 +1011,7 @@ class Room:
 
     def _op_remove_note(self, op):
         m = self.machine(int(op["slot"]))
-        if m is None:
+        if m is None or m.get("type") == "sampler":
             return False
         pat = self.get_pattern(m, op.get("key"))
         idx = int(op["index"])
@@ -726,6 +1028,8 @@ class Room:
         if pat is None:
             return False
         pat["notes"] = []
+        if m.get("type") == "sampler":
+            pat["sampler"] = new_sampler_settings()
         return True
 
     def _op_copy_pattern(self, op):
@@ -741,7 +1045,7 @@ class Room:
     def _op_shift_pattern(self, op):
         """Shift notes in time (beats) or transpose (semitones)."""
         m = self.machine(int(op["slot"]))
-        if m is None:
+        if m is None or m.get("type") == "sampler":
             return False
         pat = self.get_pattern(m, op.get("key"))
         if pat is None:
@@ -760,7 +1064,8 @@ class Room:
         Used by AI Match to overwrite the current pattern in one op.
         """
         m = self.machine(int(op["slot"]))
-        if m is None or not isinstance(op.get("notes"), list):
+        if (m is None or m.get("type") == "sampler" or
+                not isinstance(op.get("notes"), list)):
             return False
         pat = self.get_pattern(m, op.get("key"), create=True)
         if "length" in op:
@@ -791,7 +1096,7 @@ class Room:
     def _op_flourish(self, op):
         """Generate (or reroll) flourish notes for the current pattern."""
         m = self.machine(int(op["slot"]))
-        if m is None:
+        if m is None or m.get("type") == "sampler":
             return False
         themes = [t for t in op.get("themes", []) if t in flourish.THEMES]
         pat = self.get_pattern(m, op.get("key"), create=True)
@@ -1005,6 +1310,8 @@ class Room:
         d = self.preset_dir(m["type"])
         os.makedirs(d, exist_ok=True)
         data = {"type": m["type"], "params": m["params"]}
+        if m["type"] == "sampler":
+            data["patterns"] = m["patterns"]
         for extra in ("channels", "samples", "harm1", "harm2", "width1",
                       "width2", "expr_a", "expr_b", "components", "wires",
                       "modulators", "poly"):
@@ -1041,6 +1348,13 @@ class Room:
                           "modulators", "poly"):
                 if extra in data:
                     m[extra] = data[extra]
+            if m["type"] == "sampler" and isinstance(data.get("patterns"), dict):
+                m["patterns"] = {
+                    key: copy.deepcopy(pat)
+                    for key, pat in data["patterns"].items()
+                    if _pattern_indices(key) is not None and isinstance(pat, dict)
+                }
+                _normalize_sampler_machine(m)
             m["preset"] = _safe_name(name)
             self.rev += 1
             self.dirty = True

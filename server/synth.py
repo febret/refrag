@@ -19,6 +19,12 @@ def _sample_names(machine):
         entries = machine.get("samples") or []
     elif machine.get("type") == "vocoder":
         entries = machine.get("modulators") or []
+    elif machine.get("type") == "sampler":
+        entries = [
+            pat.get("sampler") or {}
+            for pat in (machine.get("patterns") or {}).values()
+            if isinstance(pat, dict)
+        ]
     else:
         entries = []
     for entry in entries:

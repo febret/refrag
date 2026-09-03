@@ -556,6 +556,139 @@ class RoomEngineTests(unittest.TestCase):
         self.assertGreater(peak(blocks[-1]), 0.05)
         self.assertEqual(engine.status()["slot_voice_counts"][0], 1)
 
+    def _sampler_room(self, patterns, sample_rate=SR):
+        machine = state.new_machine("sampler")
+        machine["patterns"] = patterns
+        return new_room(make_doc([machine], sample_rate=sample_rate))
+
+    def _sampler_pad(self, sample, length=1, **overrides):
+        settings = state.new_sampler_settings()
+        settings["sample"] = sample
+        settings.update(overrides)
+        return {"length": length, "sampler": settings}
+
+    def test_sampler_slot_selection_picks_the_matching_sample(self):
+        # A1 (index 0) and B1 (index 16) point at differently-pitched tones;
+        # note_on must select the sample wired to the triggered pad, not just
+        # "whatever is loaded".
+        n = 4096
+        lo = np.sin(np.linspace(0.0, 2.0 * np.pi * 8.0, n, endpoint=False)).astype(np.float32)
+        hi = np.sin(np.linspace(0.0, 2.0 * np.pi * 90.0, n, endpoint=False)).astype(np.float32)
+        engine = self._sampler_room({
+            "A1": self._sampler_pad("lo"),
+            "B1": self._sampler_pad("hi"),
+        })
+        engine.register_sample("lo", lo, SR)
+        engine.register_sample("hi", hi, SR)
+
+        engine.note_on(0, 0, 1.0)
+        low_crossings = zero_crossings(engine.render(1024, 120.0)[0])
+
+        engine.note_on(0, 16, 1.0)  # chokes A1's voice, plays B1's sample instead
+        high_crossings = zero_crossings(engine.render(1024, 120.0)[0])
+
+        self.assertGreater(high_crossings, low_crossings * 2)
+
+    def test_sampler_crop_restricts_playback_to_the_selected_region(self):
+        # First half of the buffer is silent, second half is loud; cropping to
+        # one half or the other must be reflected in the rendered output.
+        n = 8192
+        buf = np.zeros(n, dtype=np.float32)
+        buf[n // 2:] = 0.8
+
+        quiet_engine = self._sampler_room({
+            "A1": self._sampler_pad("split", start=0.0, end=0.5),
+        })
+        quiet_engine.register_sample("split", buf, SR)
+        quiet_engine.note_on(0, 0, 1.0)
+        quiet_out = quiet_engine.render(2048, 120.0)
+
+        loud_engine = self._sampler_room({
+            "A1": self._sampler_pad("split", start=0.5, end=1.0),
+        })
+        loud_engine.register_sample("split", buf, SR)
+        loud_engine.note_on(0, 0, 1.0)
+        loud_out = loud_engine.render(2048, 120.0)
+
+        self.assertLess(peak(quiet_out), 0.05)
+        self.assertGreater(peak(loud_out), 0.3)
+
+    def test_sampler_output_stays_finite_with_all_shaping_engaged(self):
+        rng = np.random.default_rng(7)
+        noisy = (rng.standard_normal(6000) * 0.5).astype(np.float32)
+        pad = self._sampler_pad(
+            "noisy", gain=3.0, tone=0.7, bass=8.0, mid=-6.0, high=5.0,
+            distortion=0.6, pitch=7.0)
+        pad["sampler"]["envelopes"]["volume"] = {
+            "attack": 0.1, "decay": 0.2, "sustain": 0.6, "release": 0.2}
+        pad["sampler"]["envelopes"]["tone"] = {
+            "attack": 0.0, "decay": 0.0, "sustain": 1.0, "release": 0.0, "depth": -0.8}
+        pad["sampler"]["envelopes"]["distortion"] = {
+            "attack": 0.0, "decay": 0.0, "sustain": 1.0, "release": 0.0, "depth": 0.4}
+        pad["sampler"]["envelopes"]["pitch"] = {
+            "attack": 0.0, "decay": 0.0, "sustain": 1.0, "release": 0.0, "depth": 5.0}
+        engine = self._sampler_room({"A1": pad})
+        engine.register_sample("noisy", noisy, SR)
+        engine.note_on(0, 0, 1.0)
+        out = np.concatenate([engine.render(BLOCK, 120.0) for _ in range(6)], axis=1)
+        self.assertTrue(np.all(np.isfinite(out)))
+
+    def test_sampler_pattern_boundary_ends_the_voice_even_mid_sample(self):
+        # The natural sample is far longer than one very short pattern, so the
+        # voice must stop at the pattern boundary rather than playing out.
+        n = 200000
+        tone = np.sin(np.linspace(0.0, 2.0 * np.pi * 5.0, n, endpoint=False)).astype(np.float32)
+        engine = self._sampler_room({"A1": self._sampler_pad("tone", length=1)})
+        engine.register_sample("tone", tone, SR)
+        engine.note_on(0, 0, 1.0)
+        for _ in range(20):
+            engine.render(BLOCK, 3000.0)  # high BPM => a very short pattern span
+        self.assertEqual(engine.status()["slot_voice_counts"][0], 0)
+
+    def test_sampler_first_block_is_immediately_audible(self):
+        # Regression test: the onset de-click ramp must start from a nonzero
+        # value. If it started at exactly 0 (local == 0), the voice would be
+        # killed on its very first rendered sample and never be heard.
+        n = 4096
+        tone = np.full(n, 0.9, dtype=np.float32)
+        engine = self._sampler_room({"A1": self._sampler_pad("tone")})
+        engine.register_sample("tone", tone, SR)
+        engine.note_on(0, 0, 1.0)
+        out = engine.render(8, 120.0)
+        self.assertGreater(peak(out), 0.01)
+        self.assertEqual(engine.status()["slot_voice_counts"][0], 1)
+
+    def test_sampler_note_off_stops_the_voice(self):
+        # note_off only sets released_at generically, which render_sampler
+        # ignores (its span is fixed at note-on); it must also route through
+        # stop_at so preview pointerup / seek / stop actually mute the pad.
+        n = 200000
+        tone = np.sin(np.linspace(0.0, 2.0 * np.pi * 30.0, n, endpoint=False)).astype(np.float32)
+        engine = self._sampler_room({"A1": self._sampler_pad("tone", length=8)})
+        engine.register_sample("tone", tone, SR)
+        engine.note_on(0, 0, 1.0)
+        engine.render(64, 120.0)
+        self.assertEqual(engine.status()["slot_voice_counts"][0], 1)
+        engine.note_off(0, 0)
+        # Render past the short de-click fade so the released voice retires.
+        out = engine.render(BLOCK, 120.0)
+        self.assertEqual(engine.status()["slot_voice_counts"][0], 0)
+        self.assertLess(peak(out[:, -64:]), 1e-3)
+
+    def test_sampler_all_off_stops_the_voice(self):
+        n = 200000
+        tone = np.sin(np.linspace(0.0, 2.0 * np.pi * 30.0, n, endpoint=False)).astype(np.float32)
+        engine = self._sampler_room({"A1": self._sampler_pad("tone", length=8)})
+        engine.register_sample("tone", tone, SR)
+        engine.note_on(0, 0, 1.0)
+        engine.render(64, 120.0)
+        self.assertEqual(engine.status()["slot_voice_counts"][0], 1)
+        engine.all_off(0)
+        out = engine.render(BLOCK, 120.0)
+        self.assertEqual(engine.status()["slot_voice_counts"][0], 0)
+        self.assertLess(peak(out[:, -64:]), 1e-3)
+
+
     def test_vocoder_sample_modulator_updates_band_vu(self):
         machine = state.new_machine("vocoder")
         machine["modulators"][0]["source"] = "formant"

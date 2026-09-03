@@ -82,6 +82,16 @@ class MachineRenderTests(unittest.TestCase):
     def test_pcmsynth(self):
         self.assertGreater(np.max(np.abs(self.render_machine("pcmsynth"))), 0.001)
 
+    def test_sampler(self):
+        m = state.new_machine("sampler")
+        m["patterns"]["A1"] = state.new_pattern("sampler")
+        m["patterns"]["A1"]["sampler"]["sample"] = "kick"
+        graph = MachineGraph(m)
+        graph.note_on(0, 1.0)
+        out = graph.render()
+        self.assertTrue(np.all(np.isfinite(out)))
+        self.assertGreater(np.max(np.abs(out)), 0.001)
+
     def test_bassline(self):
         self.assertGreater(np.max(np.abs(self.render_machine("bassline", 40))), 0.01)
 
@@ -109,6 +119,12 @@ class MachineRenderTests(unittest.TestCase):
             out = graph.render(16)
         self.assertGreater(out[0, 0], 0.45)
         self.assertAlmostEqual(float(out[0, 0]), float(out[1, 0]), places=6)
+
+    def test_sampler_referenced_samples_are_registered(self):
+        m = state.new_machine("sampler")
+        m["patterns"]["A1"] = state.new_pattern("sampler")
+        m["patterns"]["A1"]["sampler"]["sample"] = "kick"
+        self.assertEqual(synth._sample_names(m), {"kick"})
 
     def test_padsynth(self):
         self.assertGreater(np.max(np.abs(self.render_machine("padsynth"))), 0.01)
@@ -326,6 +342,57 @@ class EngineTests(unittest.TestCase):
         out = np.concatenate([eng.render_block() for _ in range(8)], axis=1)
         self.assertGreater(np.max(np.abs(out)), 0.01)
         self.assertGreater(eng.position(), 0)
+
+    def test_sampler_pattern_compiles_to_one_full_span_trigger(self):
+        room = state.Room("sampler-events")
+        room.doc = state.new_room_doc()
+        room.apply({"op": "add_machine", "slot": 0, "mtype": "sampler"})
+        room.apply({
+            "op": "set_sampler_param", "slot": 0, "key": "B3",
+            "param": "sample", "value": "kick",
+        })
+        room.apply({
+            "op": "set_pattern_length", "slot": 0, "key": "B3", "length": 2,
+        })
+        room.apply({"op": "select_pattern", "slot": 0, "bank": 1, "pattern": 2})
+        eng = AudioEngine(room)
+        events = eng._pattern_events(0, room.machine(0), 0.0, 0.2, room.doc)
+        self.assertEqual(events, [
+            (0.0, "on", 18, 1.0, 0),
+            (8.0, "off", 18, 0, 0),
+        ])
+        self.assertNotIn("transpose_step", eng.status()["looper"]["0"])
+
+    def test_sampler_random_looper_uses_assigned_samples(self):
+        room = state.Room("sampler-random")
+        room.doc = state.new_room_doc()
+        room.apply({"op": "add_machine", "slot": 0, "mtype": "sampler"})
+        room.apply({
+            "op": "set_sampler_param", "slot": 0, "key": "C7",
+            "param": "sample", "value": "kick",
+        })
+        room.apply({"op": "looper_set_bank", "slot": 0, "bank": 2})
+        eng = AudioEngine(room)
+        self.assertEqual(eng._random_pattern_for_slot(room.machine(0)), (2, 6))
+
+    def test_sampler_song_block_uses_pattern_slot_trigger(self):
+        room = state.Room("sampler-song")
+        room.doc = state.new_room_doc()
+        room.apply({"op": "add_machine", "slot": 0, "mtype": "sampler"})
+        room.apply({
+            "op": "set_sampler_param", "slot": 0, "key": "D16",
+            "param": "sample", "value": "kick",
+        })
+        room.apply({
+            "op": "song_add", "machine": 0, "bank": 3, "pattern": 15,
+            "start": 2, "length": 1,
+        })
+        room.doc["transport"]["mode"] = "song"
+        eng = AudioEngine(room)
+        events = eng._pattern_events(0, room.machine(0), 8.0, 8.2, room.doc)
+        self.assertTrue(any(
+            event[1] == "on" and event[2] == 63 and event[0] == 8.0
+            for event in events))
 
     def test_looper_queues_and_launches_at_pattern_boundary(self):
         room = self._room_with_song()

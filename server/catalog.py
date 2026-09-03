@@ -131,6 +131,14 @@ MACHINES = {
         # Per-sample slot settings live in machine["samples"], not controls.
     },
 
+    "sampler": {
+        "name": "Sampler",
+        "poly": 1,
+        "controls": {
+            "volume": knob("Volume", 0, 2, 1.0),
+        },
+    },
+
     "bassline": {
         "name": "BassLine",
         "poly": 1,
@@ -354,9 +362,9 @@ MACHINES = {
     },
 }
 
-MACHINE_ORDER = ["subsynth", "pcmsynth", "bassline", "beatbox", "padsynth",
-                 "bitsynth", "modular", "organ", "vocoder", "fmsynth",
-                 "kssynth"]
+MACHINE_ORDER = ["subsynth", "pcmsynth", "sampler", "bassline", "beatbox",
+                 "padsynth", "bitsynth", "modular", "organ", "vocoder",
+                 "fmsynth", "kssynth"]
 
 # ---------------------------------------------------------------------------
 # Insert effects (16)

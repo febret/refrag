@@ -251,14 +251,14 @@ class AudioEngine:
         return out
 
     def _current_transpose(self, slot_idx, m):
-        if m["type"] == "beatbox":
+        if m["type"] in ("beatbox", "sampler"):
             return 0
         steps = self._transpose_steps_for_machine(m)
         idx = self.slots[slot_idx].transpose_step % len(steps)
         return steps[idx]["transpose"]
 
     def _advance_transpose_step(self, slot_idx, m):
-        if m["type"] == "beatbox":
+        if m["type"] in ("beatbox", "sampler"):
             return
         steps = self._transpose_steps_for_machine(m)
         if not steps:
@@ -276,7 +276,7 @@ class AudioEngine:
         candidates = []
         for pattern in range(16):
             pat = m["patterns"].get(BANKS[bank] + str(pattern + 1))
-            if pat and pat.get("notes"):
+            if self._pattern_has_content(m, pat):
                 candidates.append((bank, pattern))
         if not candidates:
             return None
@@ -316,6 +316,22 @@ class AudioEngine:
             return cached
 
         events = []
+        m = self.room.machine(slot_idx)
+        if m is not None and m.get("type") == "sampler":
+            settings = pat.get("sampler") or {}
+            indices = self._sampler_pattern_indices(patkey)
+            if settings.get("sample") and indices is not None:
+                bank, pattern = indices
+                events.append((
+                    0.0,
+                    bank * 16 + pattern,
+                    pat["length"] * BEATS_PER_MEASURE,
+                    1.0,
+                    0,
+                ))
+            compiled = ([event[0] for event in events], events)
+            self._pattern_event_cache[cache_key] = compiled
+            return compiled
         shuffle = doc["shuffle"]
         smode = doc["shuffle_mode"]
         flourish_on = pat.get("flourish", {}).get("on", 1)
@@ -332,6 +348,26 @@ class AudioEngine:
         compiled = ([event[0] for event in events], events)
         self._pattern_event_cache[cache_key] = compiled
         return compiled
+
+    @staticmethod
+    def _sampler_pattern_indices(patkey):
+        if len(patkey) < 2 or patkey[0] not in BANKS:
+            return None
+        try:
+            pattern = int(patkey[1:]) - 1
+        except ValueError:
+            return None
+        if not 0 <= pattern < 16:
+            return None
+        return BANKS.index(patkey[0]), pattern
+
+    @staticmethod
+    def _pattern_has_content(m, pat):
+        if not pat:
+            return False
+        if m.get("type") == "sampler":
+            return bool((pat.get("sampler") or {}).get("sample"))
+        return bool(pat.get("notes"))
 
     @staticmethod
     def _select_events(compiled, lo, hi):
@@ -646,7 +682,7 @@ class AudioEngine:
                 ]
                 entry["queued_bank"] = s.queued_patterns[0][0]
                 entry["queued_pattern"] = s.queued_patterns[0][1]
-            if m["type"] != "beatbox":
+            if m["type"] not in ("beatbox", "sampler"):
                 entry["transpose_step"] = s.transpose_step
             looper[str(idx)] = entry
         st = {"pos": round(self.pos, 4), "vu": vus,
@@ -733,3 +769,67 @@ def render_song(room, loop_only=False):
             room.engine = getattr(room, "engine", None)
     out = np.concatenate(chunks, axis=1)[:, :total]
     return out
+
+
+def render_pattern(room, slot_idx, bank, pattern, bpm=120.0):
+    """Render a single machine pattern to a stereo float32 array.
+
+    Returns (audio, sample_rate) where audio is shape (2, frames).
+    """
+    doc = room.doc
+    audio = doc.get("audio") or {}
+    sample_rate = int(audio.get("sample_rate", AUDIO_DEFAULT_SAMPLE_RATE))
+    block_size = int(audio.get("block_size", AUDIO_DEFAULT_BLOCK_SIZE))
+    engine = AudioEngine.__new__(AudioEngine)
+    engine.room = room
+    engine.sample_rate = sample_rate
+    engine.block_size = block_size
+    engine.slots = [MachineSlot() for _ in range(len(doc["machines"]))]
+    engine.graph = synth.NativeRoomEngine(
+        sample_rate, block_size, len(engine.slots))
+    engine.master_vu = (0.0, 0.0)
+    engine.lim_gr = 0.0
+    engine._native_status = {}
+    engine.auto_values = {}
+    engine.live_recorded = {}
+    engine.on_state_change = None
+    engine._idle_blocks = 0
+    engine._tail_blocks = 0
+    engine._sequence_rev = None
+    engine._pattern_event_cache = {}
+    engine._song_event_cache = None
+
+    with room.lock:
+        saved_transport = copy.deepcopy(doc["transport"])
+        m = room.machine(slot_idx)
+        if m is None:
+            return None, sample_rate
+        pat = room.get_pattern(m, BANKS[bank] + str(pattern + 1))
+        if pat is None:
+            return None, sample_rate
+        beats = pat.get("length", 1) * BEATS_PER_MEASURE
+        notes = pat.get("notes", [])
+        spb = sample_rate * 60.0 / bpm
+        tail = 1.0
+        total = int(beats * spb + tail * sample_rate)
+        doc["transport"]["playing"] = True
+        doc["transport"]["mode"] = "pattern"
+        doc["transport"]["loop"] = None
+        engine.pos = 0.0
+        chunks = []
+        try:
+            for note in notes:
+                note_on = float(note[1])
+                note_idx = int(note[0])
+                vel = float(note[3]) if len(note) > 3 else 1.0
+                engine.graph.note_on(slot_idx, note_idx, vel, 0, 0)
+            done = 0
+            while done < total:
+                blk = engine._render_block_locked(doc)
+                chunks.append(blk)
+                done += blk.shape[1]
+        finally:
+            doc["transport"].update(saved_transport)
+            room.engine = getattr(room, "engine", None)
+    out = np.concatenate(chunks, axis=1)[:, :total]
+    return out, sample_rate

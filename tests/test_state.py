@@ -25,6 +25,95 @@ class StateTests(unittest.TestCase):
         self.assertTrue(self.room.apply({"op": "remove_machine", "slot": 0}))
         self.assertIsNone(self.room.doc["machines"][0])
 
+    def test_sampler_pattern_defaults_and_params(self):
+        self.room.apply({"op": "add_machine", "slot": 0, "mtype": "sampler"})
+        self.assertTrue(self.room.apply({
+            "op": "set_sampler_param", "slot": 0, "key": "B3",
+            "param": "sample", "value": "voice memo",
+        }))
+        self.assertTrue(self.room.apply({
+            "op": "set_sampler_param", "slot": 0, "key": "B3",
+            "param": "start", "value": 0.8,
+        }))
+        self.assertTrue(self.room.apply({
+            "op": "set_sampler_param", "slot": 0, "key": "B3",
+            "param": "end", "value": 0.2,
+        }))
+        settings = self.room.machine(0)["patterns"]["B3"]["sampler"]
+        self.assertEqual(settings["sample"], "voice memo")
+        self.assertLess(settings["start"], settings["end"])
+        self.assertEqual(set(settings["envelopes"]),
+                         {"volume", "tone", "distortion", "pitch"})
+
+    def test_sampler_envelope_is_clamped_to_fixed_span(self):
+        self.room.apply({"op": "add_machine", "slot": 0, "mtype": "sampler"})
+        for field in ("attack", "decay", "release"):
+            op = {
+                "op": "set_sampler_param", "slot": 0, "key": "A1",
+                "envelope": "volume", "param": field, "value": 0.8,
+            }
+            self.assertTrue(self.room.apply(op))
+            self.assertEqual(
+                op["value"],
+                self.room.machine(0)["patterns"]["A1"]["sampler"]["envelopes"]["volume"][field])
+        env = self.room.machine(0)["patterns"]["A1"]["sampler"]["envelopes"]["volume"]
+        self.assertAlmostEqual(env["attack"] + env["decay"] + env["release"], 1.0)
+        self.assertTrue(self.room.apply({
+            "op": "set_sampler_param", "slot": 0, "key": "A1",
+            "envelope": "pitch", "param": "depth", "value": 99,
+        }))
+        self.assertEqual(
+            self.room.machine(0)["patterns"]["A1"]["sampler"]["envelopes"]["pitch"]["depth"],
+            24.0)
+        self.assertFalse(self.room.apply({
+            "op": "set_sampler_param", "slot": 0, "key": "A1",
+            "param": "gain", "value": "not-a-number",
+        }))
+        self.assertFalse(self.room.apply({
+            "op": "set_sampler_param", "slot": 0, "key": "A1",
+            "param": "gain", "value": float("nan"),
+        }))
+
+    def test_sampler_pattern_can_be_replaced_atomically(self):
+        self.room.apply({"op": "add_machine", "slot": 0, "mtype": "sampler"})
+        sampler = state.new_sampler_settings()
+        sampler.update({"sample": "loop", "start": 0.8, "end": 0.9,
+                        "gain": 3.0})
+        self.assertTrue(self.room.apply({
+            "op": "set_sampler_pattern", "slot": 0, "key": "D16",
+            "length": 8, "sampler": sampler,
+        }))
+        pat = self.room.machine(0)["patterns"]["D16"]
+        self.assertEqual(pat["length"], 8)
+        self.assertEqual(pat["sampler"]["start"], 0.8)
+        self.assertEqual(pat["sampler"]["end"], 0.9)
+        self.assertEqual(pat["sampler"]["sample"], "loop")
+
+    def test_sampler_bulk_assignment_copy_clear_and_roundtrip(self):
+        self.room.apply({"op": "add_machine", "slot": 0, "mtype": "sampler"})
+        self.assertTrue(self.room.apply({
+            "op": "assign_sampler_bank", "slot": 0, "bank": 2, "start": 14,
+            "samples": ["first", "second"],
+        }))
+        self.assertFalse(self.room.apply({
+            "op": "assign_sampler_bank", "slot": 0, "bank": 2, "start": 15,
+            "samples": ["one", "two"],
+        }))
+        self.assertTrue(self.room.apply({
+            "op": "copy_pattern", "slot": 0, "src": "C15", "dst": "D1",
+        }))
+        self.assertEqual(
+            self.room.machine(0)["patterns"]["D1"]["sampler"]["sample"], "first")
+        self.assertTrue(self.room.apply({
+            "op": "clear_pattern", "slot": 0, "key": "D1",
+        }))
+        self.assertEqual(
+            self.room.machine(0)["patterns"]["D1"]["sampler"]["sample"], "")
+        self.room.save(force=True)
+        loaded = state.Room("test-room")
+        self.assertEqual(
+            loaded.machine(0)["patterns"]["C16"]["sampler"]["sample"], "second")
+
 
     def test_set_param(self):
         self.room.apply({"op": "add_machine", "slot": 0, "mtype": "bassline"})
@@ -228,6 +317,53 @@ class StateTests(unittest.TestCase):
         self.assertEqual(len(m["patterns"]["A1"]["notes"]), 1)
         self.assertEqual(m["transpose"], 0)
         self.assertEqual(len(m["transpose_steps"]), 4)
+
+    def test_replace_machine_normalizes_sampler_patterns(self):
+        self.room.apply({"op": "add_machine", "slot": 0, "mtype": "subsynth"})
+        self.room.apply({"op": "add_note", "slot": 0, "note": 60, "start": 0,
+                         "dur": 1})
+        self.room.apply({"op": "replace_machine", "slot": 0, "mtype": "sampler"})
+        sampler = self.room.machine(0)
+        self.assertEqual(sampler["patterns"]["A1"]["notes"], [])
+        self.assertTrue(self.room.apply({
+            "op": "set_sampler_param", "slot": 0, "key": "A1",
+            "param": "sample", "value": "kick",
+        }))
+
+        self.room.apply({"op": "replace_machine", "slot": 0, "mtype": "fmsynth"})
+        self.assertNotIn("sampler", self.room.machine(0)["patterns"]["A1"])
+
+    def test_sampler_preset_round_trips_pattern_bank(self):
+        preset_tmp = tempfile.TemporaryDirectory()
+        original_preset_dir = state.PRESET_DIR
+        state.PRESET_DIR = preset_tmp.name
+        try:
+            self.room.apply({"op": "add_machine", "slot": 0, "mtype": "sampler"})
+            self.room.apply({
+                "op": "set_sampler_param", "slot": 0, "key": "B3",
+                "param": "sample", "value": "voice memo",
+            })
+            self.room.apply({
+                "op": "set_sampler_param", "slot": 0, "key": "B3",
+                "param": "start", "value": 0.25,
+            })
+            self.room.apply({
+                "op": "set_sampler_param", "slot": 0, "key": "B3",
+                "envelope": "pitch", "param": "depth", "value": 7,
+            })
+            self.assertTrue(self.room.save_preset(0, "My Bank"))
+
+            self.room.apply({
+                "op": "clear_pattern", "slot": 0, "key": "B3",
+            })
+            self.assertTrue(self.room.load_preset(0, "My Bank"))
+            settings = self.room.machine(0)["patterns"]["B3"]["sampler"]
+            self.assertEqual(settings["sample"], "voice memo")
+            self.assertEqual(settings["start"], 0.25)
+            self.assertEqual(settings["envelopes"]["pitch"]["depth"], 7.0)
+        finally:
+            state.PRESET_DIR = original_preset_dir
+            preset_tmp.cleanup()
 
 
 if __name__ == "__main__":

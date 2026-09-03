@@ -276,6 +276,62 @@ async def samples_handler(request):
                               "user": samples.user_names()})
 
 
+async def sample_waveform_handler(request):
+    name = request.query.get("name", "")
+    try:
+        points = int(request.query.get("points", 1024))
+        summary = samples.waveform_summary(name, points)
+    except (TypeError, ValueError):
+        return web.json_response({"error": "invalid waveform request"}, status=400)
+    except KeyError:
+        return web.json_response({"error": "sample not found"}, status=404)
+    return web.json_response(summary)
+
+
+async def normalize_sampler_handler(request):
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise TypeError
+        slot = int(body["slot"])
+        key = str(body["key"])
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return web.json_response({"error": "invalid normalization request"}, status=400)
+    sess = get_session(str(body.get("room") or "default"))
+    room = sess.room
+    with room.lock:
+        machine = room.machine(slot)
+        pattern = room.get_pattern(machine, key) if machine is not None else None
+        settings = pattern.get("sampler") if isinstance(pattern, dict) else None
+        if machine is None or machine.get("type") != "sampler" or not settings:
+            return web.json_response({"error": "sampler pattern not found"}, status=404)
+        name = settings.get("sample", "")
+        start = settings.get("start", 0.0)
+        end = settings.get("end", 1.0)
+        try:
+            peak = samples.sample_peak(name, start, end)
+        except KeyError:
+            return web.json_response({"error": "sample not found"}, status=404)
+        except ValueError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        if peak <= 1e-9:
+            return web.json_response({"error": "cannot normalize a silent sample"},
+                                     status=422)
+        gain = min(16.0, 0.95 / peak)
+        changed = room.apply({
+            "op": "set_sampler_param",
+            "slot": slot,
+            "key": key,
+            "param": "gain",
+            "value": gain,
+        })
+    if not changed:
+        return web.json_response({"error": "sampler pattern changed"}, status=409)
+    sess.engine.wake()
+    await sess.broadcast_doc()
+    return web.json_response({"gain": gain, "peak": peak})
+
+
 async def upload_sample(request):
     """Accept a WAV upload (multipart fields: optional 'name', 'file')."""
     reader = await request.multipart()
@@ -354,6 +410,10 @@ async def aimatch_handler(request):
     m = room.machine(slot)
     if m is None:
         return web.json_response({"error": "no machine in that slot"}, status=400)
+    if m.get("type") == "sampler":
+        return web.json_response(
+            {"error": "AI Match requires a note or drum pattern editor"},
+            status=400)
 
     reader = await request.multipart()
     data = None
@@ -450,7 +510,7 @@ async def ws_handler(request):
                     elif op.get("op") in ("set_param", "set_mixer", "set_master",
                                         "set_effect_param", "mod_param",
                                         "set_channel_param", "set_harmonic",
-                                        "set_sample_param"):
+                                        "set_sample_param", "set_sampler_param"):
                         # lightweight echo for continuous controls
                         await sess.broadcast({"type": "opecho", "req": op},
                                              exclude=ws)
@@ -469,10 +529,12 @@ def make_app():
     app.router.add_get("/", index)
     app.router.add_get("/api/catalog", catalog_handler)
     app.router.add_get("/api/samples", samples_handler)
+    app.router.add_get("/api/samples/waveform", sample_waveform_handler)
     app.router.add_get("/api/songs", songs_handler)
     app.router.add_get("/api/rooms", songs_handler)
     app.router.add_get("/api/load", load_song_handler)
     app.router.add_post("/api/samples", upload_sample)
+    app.router.add_post("/api/sampler/normalize", normalize_sampler_handler)
     app.router.add_post("/api/aimatch", aimatch_handler)
     app.router.add_get("/api/presets/{mtype}", presets_handler)
     app.router.add_get("/api/export", export_handler)

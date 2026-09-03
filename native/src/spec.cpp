@@ -13,11 +13,11 @@ struct KindName {
 
 constexpr KindName kMachineNames[] = {
     {"subsynth", MachineKind::SubSynth}, {"pcmsynth", MachineKind::PCMSynth},
-    {"bassline", MachineKind::BassLine}, {"beatbox", MachineKind::BeatBox},
-    {"padsynth", MachineKind::PadSynth}, {"bitsynth", MachineKind::BitSynth},
-    {"modular", MachineKind::Modular},   {"organ", MachineKind::Organ},
-    {"vocoder", MachineKind::Vocoder},   {"fmsynth", MachineKind::FMSynth},
-    {"kssynth", MachineKind::KSSynth},
+    {"sampler", MachineKind::Sampler},   {"bassline", MachineKind::BassLine},
+    {"beatbox", MachineKind::BeatBox},   {"padsynth", MachineKind::PadSynth},
+    {"bitsynth", MachineKind::BitSynth}, {"modular", MachineKind::Modular},
+    {"organ", MachineKind::Organ},       {"vocoder", MachineKind::Vocoder},
+    {"fmsynth", MachineKind::FMSynth},   {"kssynth", MachineKind::KSSynth},
 };
 
 struct ModName {

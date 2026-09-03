@@ -251,6 +251,52 @@ def all_names():
     return factory_names() + [n for n in user_names() if n not in FACTORY]
 
 
+def _sample_region(name, start=0.0, end=1.0):
+    if name not in all_names():
+        raise KeyError(name)
+    x = get(name)
+    if len(x) < 2:
+        return x
+    start = max(0.0, min(1.0, float(start)))
+    end = max(0.0, min(1.0, float(end)))
+    if end <= start:
+        raise ValueError("crop end must be after crop start")
+    lo = min(len(x) - 1, int(start * (len(x) - 1)))
+    hi = max(lo + 1, min(len(x), int(np.ceil(end * (len(x) - 1))) + 1))
+    return x[lo:hi]
+
+
+def sample_peak(name, start=0.0, end=1.0):
+    region = _sample_region(name, start, end)
+    return float(np.max(np.abs(region))) if len(region) else 0.0
+
+
+def waveform_summary(name, points=1024):
+    if name not in all_names():
+        raise KeyError(name)
+    x = get(name)
+    points = max(32, min(4096, int(points)))
+    if len(x) == 0:
+        minima = maxima = [0.0]
+    else:
+        count = min(points, len(x))
+        edges = np.linspace(0, len(x), count + 1, dtype=np.int64)
+        minima = []
+        maxima = []
+        for idx in range(count):
+            bucket = x[edges[idx]:edges[idx + 1]]
+            minima.append(round(float(np.min(bucket)), 6))
+            maxima.append(round(float(np.max(bucket)), 6))
+    return {
+        "name": name,
+        "sample_rate": SR,
+        "duration": round(len(x) / SR, 6),
+        "peak": round(float(np.max(np.abs(x))) if len(x) else 0.0, 6),
+        "min": minima,
+        "max": maxima,
+    }
+
+
 def load_wav_bytes(data):
     """Parse a WAV file into mono float32 at SR."""
     with wave.open(io.BytesIO(data), "rb") as w:

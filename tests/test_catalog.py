@@ -6,10 +6,10 @@ from server import catalog
 
 
 class CatalogTests(unittest.TestCase):
-    def test_all_eleven_machines_present(self):
+    def test_all_twelve_machines_present(self):
         expected = {"subsynth", "pcmsynth", "bassline", "beatbox", "padsynth",
                     "bitsynth", "modular", "organ", "vocoder", "fmsynth",
-                    "kssynth"}
+                    "kssynth", "sampler"}
         self.assertEqual(set(catalog.MACHINES.keys()), expected)
         self.assertEqual(set(catalog.MACHINE_ORDER), expected)
 
