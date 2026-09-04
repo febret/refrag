@@ -22,7 +22,8 @@ Contents:
 [App Menu](#app-menu) ·
 [Pattern Editor](#pattern-editor) ·
 [Using your own samples](#using-your-own-samples) ·
-[Collaboration](#collaboration)
+[Collaboration](#collaboration) ·
+[Direct Server Audio Output](#direct-server-audio-output)
 
 ---
 
@@ -640,3 +641,50 @@ Every browser pointing at the same `?room=` URL shares one rack:
 - Preview-keyboard presses from other users light up on your screen.
 - Rooms persist on the server; reopening a room URL restores the whole
   session, including patterns, effects and automation.
+
+---
+
+## Direct Server Audio Output
+
+By default you only hear Refrag through your browser, which adds roughly
+100–300 ms of network and jitter-buffer latency. When the server runs on the
+same machine you are listening from — or on a box wired into a monitor system —
+it can play its rendered audio straight out of a local sound device instead,
+avoiding that delay.
+
+Set the `REFRAG_AUDIO_OUT` environment variable before starting the server:
+
+| Value | Meaning |
+| --- | --- |
+| *(unset)* | Direct output off; browser streaming only (default). |
+| `0` | Play through the system default output device. |
+| *n* | Play through the device with index *n*. |
+
+```sh
+# Linux / macOS
+REFRAG_AUDIO_OUT=0 ./start.sh
+
+# Windows (PowerShell)
+$env:REFRAG_AUDIO_OUT = "0"; .\start.bat
+```
+
+To find the index of a specific device, list them with:
+
+```sh
+python -m server.audio_out
+```
+
+Notes:
+
+- Browser streaming keeps working normally, so remote collaborators are
+  unaffected while you monitor locally.
+- With direct output enabled the server keeps rendering even when no browser is
+  connected, so you can run it headlessly.
+- All rooms are mixed together into the one device. Rooms whose sample rate or
+  block size differs from the device's are skipped, with a warning on the
+  console.
+- Requires the `sounddevice` package (installed by `requirements.txt`). If it or
+  a working audio backend is missing, the server logs a warning and starts
+  normally with direct output disabled.
+- The status readout reports `audio_out_underruns`; a steadily climbing count
+  means the render loop is not keeping up with the device.

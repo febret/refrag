@@ -14,7 +14,7 @@ import urllib.parse
 import numpy as np
 from aiohttp import WSMsgType, web
 
-from . import aimatch, catalog, factory_presets, samples
+from . import aimatch, audio_out, catalog, factory_presets, samples
 from .engine import AudioEngine, render_song
 from .state import (AUDIO_DEFAULT_BLOCK_SIZE, AUDIO_DEFAULT_SAMPLE_RATE,
                     RoomManager, SESSION_DIR)
@@ -26,6 +26,9 @@ DEFAULT_SSL_CERT = os.path.join(TLS_DIR, "refrag-cert.pem")
 DEFAULT_SSL_KEY = os.path.join(TLS_DIR, "refrag-key.pem")
 
 rooms = RoomManager()
+
+# Optional direct-to-device audio sink, shared by every room (see audio_out).
+LOCAL_AUDIO = None
 
 
 class ClientSender:
@@ -107,6 +110,35 @@ class RoomSession:
         self.overruns = 0
         self.scheduler_resets = 0
         self.audio_drops = 0
+        self._local_audio_warned = False
+        self._local_sink = None
+
+    def _submit_local_audio(self, blk):
+        """Mix a rendered block into the shared local output device, if any."""
+        if LOCAL_AUDIO is None:
+            return
+        sample_rate, block_size = self._audio_settings()
+        try:
+            if not LOCAL_AUDIO.is_open:
+                LOCAL_AUDIO.open(sample_rate, block_size)
+            elif not LOCAL_AUDIO.matches(sample_rate, block_size):
+                if not self._local_audio_warned:
+                    self._local_audio_warned = True
+                    print("[audio-out] room %s runs at %d Hz / %d frames but "
+                          "the output device is open at %d Hz / %d frames; "
+                          "this room is not sent to the local device."
+                          % (self.room.id, sample_rate, block_size,
+                             LOCAL_AUDIO.sample_rate, LOCAL_AUDIO.block_size),
+                          file=sys.stderr)
+                return
+            if self._local_sink is None:
+                self._local_sink = LOCAL_AUDIO.room_sink()
+            self._local_sink.submit(blk)
+        except Exception as exc:
+            if not self._local_audio_warned:
+                self._local_audio_warned = True
+                print("[audio-out] local playback failed: %s" % exc,
+                      file=sys.stderr)
 
     def _audio_settings(self):
         audio = self.room.doc.get("audio") or {}
@@ -147,7 +179,7 @@ class RoomSession:
         idle_silence = 0
         while True:
             try:
-                if not self.sockets:
+                if not self.sockets and LOCAL_AUDIO is None:
                     await asyncio.sleep(0.25)
                     next_t = time.monotonic()
                     continue
@@ -155,7 +187,9 @@ class RoomSession:
                     idle_silence += 1
                 else:
                     idle_silence = 0
-                if idle_silence > 12:      # ~0.5s of silence: stop streaming
+                # ~0.5s of silence: stop streaming.  With a local device open
+                # we keep rendering so its ring buffer never starves.
+                if idle_silence > 12 and LOCAL_AUDIO is None:
                     await asyncio.sleep(0.05)
                     next_t = time.monotonic()
                     now = time.monotonic()
@@ -176,6 +210,7 @@ class RoomSession:
                                   self.render_ms * 0.9 + elapsed_ms * 0.1)
                 self.render_peak_ms = max(self.render_peak_ms, elapsed_ms)
                 n = blk.shape[1]
+                self._submit_local_audio(blk)
                 pcm = np.empty(n * 2, dtype="<i2")
                 pcm[0::2] = np.clip(blk[0] * 32000, -32768, 32767).astype("<i2")
                 pcm[1::2] = np.clip(blk[1] * 32000, -32768, 32767).astype("<i2")
@@ -212,19 +247,22 @@ class RoomSession:
 
     async def send_status(self):
         sample_rate, block_size = self._audio_settings()
+        perf = {
+            "render_ms": round(self.render_ms, 2),
+            "render_peak_ms": round(self.render_peak_ms, 2),
+            "deadline_late_ms": round(self.deadline_late_ms, 2),
+            "overruns": self.overruns,
+            "render_drops": self.overruns,
+            "scheduler_resets": self.scheduler_resets,
+            "audio_drops": self.audio_drops,
+        }
+        if LOCAL_AUDIO is not None:
+            perf["audio_out_underruns"] = LOCAL_AUDIO.underruns
         msg = json.dumps({
             "type": "status",
             **self.engine.status(),
             "audio": {"sample_rate": sample_rate, "block_size": block_size},
-            "perf": {
-                "render_ms": round(self.render_ms, 2),
-                "render_peak_ms": round(self.render_peak_ms, 2),
-                "deadline_late_ms": round(self.deadline_late_ms, 2),
-                "overruns": self.overruns,
-                "render_drops": self.overruns,
-                "scheduler_resets": self.scheduler_resets,
-                "audio_drops": self.audio_drops,
-            },
+            "perf": perf,
         })
         for sender in list(self.senders.values()):
             sender.enqueue_text(msg, coalesce=True)
@@ -541,7 +579,29 @@ def make_app():
     app.router.add_get("/refrag-cert.pem", tls_certificate_handler)
     app.router.add_get("/ws", ws_handler)
     app.router.add_static("/web/", WEB_DIR)
+    app.on_startup.append(_start_local_audio_room)
+    app.on_shutdown.append(_close_local_audio)
     return app
+
+
+def init_local_audio():
+    """Enable direct device output when REFRAG_AUDIO_OUT is set."""
+    global LOCAL_AUDIO
+    LOCAL_AUDIO = audio_out.configure_from_env()
+    return LOCAL_AUDIO
+
+
+async def _start_local_audio_room(app):
+    """Bring up the default room so local playback works with no browser."""
+    if LOCAL_AUDIO is not None:
+        get_session("default")
+
+
+async def _close_local_audio(app):
+    global LOCAL_AUDIO
+    sink, LOCAL_AUDIO = LOCAL_AUDIO, None
+    if sink is not None:
+        sink.close()
 
 
 def _certificate_paths():
@@ -586,6 +646,7 @@ def main():
     port = int(os.environ.get("REFRAG_PORT", "8000"))
     os.makedirs(SESSION_DIR, exist_ok=True)
     factory_presets.install()
+    init_local_audio()
     app = make_app()
     ssl_context = ssl_context_from_env()
     cert, _ = _certificate_paths()
