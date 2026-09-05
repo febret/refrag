@@ -42,7 +42,7 @@ There is no linter/formatter configured; match the existing code style.
 
 ```
 server/
-  app.py             # HTTP + WebSocket server, room API, transport clock, WAV export
+  app.py             # HTTP + WebSocket server, single-room API, transport clock, WAV export
   state.py           # Collaborative room state, JSON persistence to data/sessions/
   synth.py           # Native binding and render-sample registration
   engine.py          # Transport/sequencer/automation orchestration

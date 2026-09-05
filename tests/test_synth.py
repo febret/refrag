@@ -13,8 +13,8 @@ from server import catalog, state, synth
 from server.engine import BLOCK, AudioEngine, render_song
 
 
-def make_room(name="synth-test"):
-    room = state.Room(name)
+def make_room(_name=None):
+    room = state.Room()
     room.doc = state.new_room_doc()
     return room
 
@@ -324,7 +324,7 @@ class EngineTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def _room_with_song(self):
-        room = state.Room("engine-test")
+        room = state.Room()
         room.doc = state.new_room_doc()
         room.apply({"op": "add_machine", "slot": 0, "mtype": "subsynth"})
         room.apply({"op": "add_note", "slot": 0, "note": 60, "start": 0,
@@ -344,7 +344,7 @@ class EngineTests(unittest.TestCase):
         self.assertGreater(eng.position(), 0)
 
     def test_sampler_pattern_compiles_to_one_full_span_trigger(self):
-        room = state.Room("sampler-events")
+        room = state.Room()
         room.doc = state.new_room_doc()
         room.apply({"op": "add_machine", "slot": 0, "mtype": "sampler"})
         room.apply({
@@ -364,7 +364,7 @@ class EngineTests(unittest.TestCase):
         self.assertNotIn("transpose_step", eng.status()["looper"]["0"])
 
     def test_sampler_random_looper_uses_assigned_samples(self):
-        room = state.Room("sampler-random")
+        room = state.Room()
         room.doc = state.new_room_doc()
         room.apply({"op": "add_machine", "slot": 0, "mtype": "sampler"})
         room.apply({
@@ -376,7 +376,7 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(eng._random_pattern_for_slot(room.machine(0)), (2, 6))
 
     def test_sampler_song_block_uses_pattern_slot_trigger(self):
-        room = state.Room("sampler-song")
+        room = state.Room()
         room.doc = state.new_room_doc()
         room.apply({"op": "add_machine", "slot": 0, "mtype": "sampler"})
         room.apply({

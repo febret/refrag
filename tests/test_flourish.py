@@ -69,7 +69,7 @@ class FlourishOpTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self._orig = state.SESSION_DIR
         state.SESSION_DIR = self.tmp.name
-        self.room = state.Room("flourish-room")
+        self.room = state.Room()
         self.room.apply({"op": "add_machine", "slot": 0, "mtype": "subsynth"})
         self.room.apply({"op": "add_note", "slot": 0, "note": 60,
                          "start": 0.0, "dur": 1.0, "vel": 0.9})
@@ -151,7 +151,7 @@ class FlourishEngineTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self._orig = state.SESSION_DIR
         state.SESSION_DIR = self.tmp.name
-        self.room = state.Room("flourish-engine-room")
+        self.room = state.Room()
         self.room.apply({"op": "add_machine", "slot": 0, "mtype": "subsynth"})
         self.engine = AudioEngine(self.room)
         m = self.room.machine(0)

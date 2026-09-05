@@ -124,7 +124,7 @@ function aiMatchDialog(slot, m) {
     const fd = new FormData();
     fd.append("file", encodeWav(st.audio, st.sr), "aimatch.wav");
     try {
-      const q = "room=" + encodeURIComponent(App.room) + "&slot=" + slot;
+      const q = "slot=" + slot;
       const resp = await fetch("/api/aimatch?" + q, { method: "POST", body: fd });
       const out = await resp.json();
       if (!resp.ok) {

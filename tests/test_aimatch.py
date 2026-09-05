@@ -11,7 +11,7 @@ from aiohttp import FormData
 from aiohttp.test_utils import AioHTTPTestCase
 
 from server import aimatch, samples, state
-from server.app import make_app
+from server.app import get_room, make_app
 
 SR = 44100
 
@@ -165,14 +165,13 @@ class AiMatchApiTests(AioHTTPTestCase):
         return fd
 
     async def test_match_overwrites_pattern(self):
-        from server.app import rooms
         fake = {"length": 2, "notes": [[60, 0.0, 1.0, 0.8, 0],
                                        [64, 4.0, 1.0, 0.6, 0]]}
         with mock.patch.object(aimatch, "match_pattern", return_value=fake):
-            room = rooms.get("aimatch-room")
+            room = get_room()
             room.apply({"op": "add_machine", "slot": 0, "mtype": "subsynth"})
             resp = await self.client.post(
-                "/api/aimatch?room=aimatch-room&slot=0", data=self.form())
+                "/api/aimatch?slot=0", data=self.form())
             self.assertEqual(resp.status, 200)
             body = await resp.json()
             self.assertEqual(body, {"notes": 2, "measures": 2})
@@ -183,8 +182,7 @@ class AiMatchApiTests(AioHTTPTestCase):
 
 
     async def test_silent_clip_reports_no_notes(self):
-        from server.app import rooms
-        room = rooms.get("aimatch-silent")
+        room = get_room()
         room.apply({"op": "add_machine", "slot": 0, "mtype": "beatbox"})
         buf = io.BytesIO()
         samples.write_wav(buf, np.zeros(SR))
@@ -192,7 +190,7 @@ class AiMatchApiTests(AioHTTPTestCase):
         fd.add_field("file", buf.getvalue(), filename="silent.wav",
                      content_type="audio/wav")
         resp = await self.client.post(
-            "/api/aimatch?room=aimatch-silent&slot=0", data=fd)
+            "/api/aimatch?slot=0", data=fd)
         self.assertEqual(resp.status, 422)
 
 

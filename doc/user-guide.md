@@ -40,8 +40,9 @@ Quick glossary:
 
 - **Machine** – a device that produces or modifies sound. Up to 14 dynamic
   machines plus the five permanent devices.
-- **Room** – a shared session. Everyone who opens the same room URL edits the
-  same rack. Rooms auto-save to `data/sessions/`.
+- **Room** – the shared session hosted by the running server. Everyone who
+  opens the server URL edits the same rack. The room auto-saves to
+  `data/sessions/`.
 - **Pattern** – the basic building block of a song: up to 8 measures of notes
   stored in one of 64 slots (banks A–D × 16) per machine.
 - **LFO** – low frequency oscillator; a control signal that wobbles a
@@ -54,9 +55,9 @@ python -m pip install -r requirements.txt
 ./start.sh            # start.bat on Windows
 ```
 
-Open `https://localhost:8000` (or `https://localhost:8000/?room=my-band` to
-pick a room). Click the **speaker button** in the control panel once — the
-browser needs a user gesture before it may play audio.
+Open `https://localhost:8000`. Each running server hosts one collaborative
+room. Click the **speaker button** in the control panel once — the browser
+needs a user gesture before it may play audio.
 
 Refrag generates `data/tls/refrag-cert.pem` and `refrag-key.pem` on first
 launch and always serves HTTPS. Install and trust the public certificate on
@@ -491,10 +492,10 @@ machine's type while keeping its patterns, mixer strip and insert effects
 ![App menu](img/app-menu.png)
 
 - **Song tab** — *New* (clears the rack after confirmation), *Save* (forces a
-  room snapshot to disk; rooms also auto-save a couple of seconds after any
-  change), *Export WAV*, *Export Loop*, the song name, **Tempo** (with tap
+  room snapshot to disk; the room also auto-saves a couple of seconds after
+  any change), *Export WAV*, *Export Loop*, the song name, **Tempo** (with tap
   tempo on the BPM display), global **shuffle** mode (8th "March" or 16th
-  "Swing") and amount, and the **room** switcher.
+  "Swing") and amount.
 - **Options tab** — enable the audio stream, choose the shared engine
   **sample rate** and **block size** (with a latency estimate), upload
   audio files or record samples from the microphone (see
@@ -631,7 +632,7 @@ The same actions are also available from the App Menu → Options tab.
 
 ## Collaboration
 
-Every browser pointing at the same `?room=` URL shares one rack:
+Every browser pointing at the server URL shares one rack:
 
 - All edits — machines, knobs, notes, song blocks, transport — are broadcast
   instantly to every participant.
@@ -639,7 +640,7 @@ Every browser pointing at the same `?room=` URL shares one rack:
   listeners hear an identical, synchronized mix (with roughly 100–300 ms of
   network buffering).
 - Preview-keyboard presses from other users light up on your screen.
-- Rooms persist on the server; reopening a room URL restores the whole
+- The room persists on the server; reopening the server URL restores the whole
   session, including patterns, effects and automation.
 
 ---
@@ -680,9 +681,9 @@ Notes:
   unaffected while you monitor locally.
 - With direct output enabled the server keeps rendering even when no browser is
   connected, so you can run it headlessly.
-- All rooms are mixed together into the one device. Rooms whose sample rate or
-  block size differs from the device's are skipped, with a warning on the
-  console.
+- The server room is sent to the local output device. If its sample rate or
+  block size differs from the device's, local output is skipped with a warning
+  on the console.
 - Requires the `sounddevice` package (installed by `requirements.txt`). If it or
   a working audio backend is missing, the server logs a warning and starts
   normally with direct output disabled.

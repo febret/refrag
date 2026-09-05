@@ -6,7 +6,6 @@ const App = {
   doc: null,
   catalog: null,
   sampleLib: { factory: [], user: [] },
-  room: new URLSearchParams(location.search).get("room") || "default",
   view: { kind: "machine", slot: 0 },   // machine | fx | mixer | master | seq | looper
   editorOpen: {},                        // slot -> bool (pattern editor shown)
   status: { pos: 0, vu: [], master_vu: [0, 0], auto: {}, looper: {} },
@@ -21,7 +20,7 @@ const AUDIO_BLOCK_SIZES = [256, 512, 1024, 2048, 4096];
 
 function connectWS() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  const ws = new WebSocket(`${proto}://${location.host}/ws?room=${encodeURIComponent(App.room)}`);
+  const ws = new WebSocket(`${proto}://${location.host}/ws`);
   ws.binaryType = "arraybuffer";
   App.ws = ws;
   ws.onmessage = (ev) => {
@@ -452,12 +451,6 @@ function showAppMenu() {
         el("label", "", row).textContent = "Shuffle amount";
         row.appendChild(makeKnob({ label: "Shuffle", min: 0, max: 1, default: 0 },
           App.doc.shuffle, (v) => send({ op: "set_song_prop", prop: "shuffle", value: v })));
-        row = el("div", "menu-row", c);
-        el("label", "", row).textContent = "Room";
-        const rm = el("button", "", row); rm.textContent = App.room;
-        rm.addEventListener("click", () => promptText("Switch room", App.room, (v) => {
-          location.search = "?room=" + encodeURIComponent(v || "default");
-        }));
       } else if (tab === "options") {
         const row = el("div", "menu-row", c);
         el("label", "", row).textContent = "Audio stream";
@@ -520,7 +513,7 @@ function showAppMenu() {
       } else {
         c.innerHTML = "<div style='padding:10px;line-height:1.7;font-size:13px'>" +
           "<b>Refrag</b> — collaborative web reimplementation of the Caustic rack.<br>" +
-          "Share this URL (with ?room=…) to jam with others.<br>" +
+          "Share this server URL to jam with others.<br>" +
           "All synthesis runs on the server; audio is streamed to every client.<br>" +
           "See <code>doc/user-guide.md</code> for the full manual.</div>";
       }
@@ -531,7 +524,7 @@ function showAppMenu() {
 async function showLoadSongDialog() {
   let songs = [];
   try {
-    const res = await fetch(`/api/songs?room=${encodeURIComponent(App.room)}`);
+    const res = await fetch("/api/songs");
     const data = await res.json();
     songs = Array.isArray(data.songs) ? data.songs : [];
   } catch (e) {
@@ -557,7 +550,7 @@ async function showLoadSongDialog() {
 }
 
 function exportSong(loopOnly) {
-  const url = `/api/export?room=${encodeURIComponent(App.room)}${loopOnly ? "&loop=1" : ""}`;
+  const url = `/api/export${loopOnly ? "?loop=1" : ""}`;
   const a = document.createElement("a");
   a.href = url; a.download = "";
   a.click();

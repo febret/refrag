@@ -1,4 +1,4 @@
-"""Refrag web server: static app, room API, WebSocket sync + audio streaming."""
+"""Refrag web server: static app, WebSocket sync + audio streaming."""
 
 import asyncio
 from collections import deque
@@ -17,7 +17,7 @@ from aiohttp import WSMsgType, web
 from . import aimatch, audio_out, catalog, factory_presets, samples
 from .engine import AudioEngine, render_song
 from .state import (AUDIO_DEFAULT_BLOCK_SIZE, AUDIO_DEFAULT_SAMPLE_RATE,
-                    RoomManager, SESSION_DIR)
+                    Room, SESSION_DIR, list_snapshots)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB_DIR = os.path.join(ROOT, "web")
@@ -25,9 +25,9 @@ TLS_DIR = os.path.join(ROOT, "data", "tls")
 DEFAULT_SSL_CERT = os.path.join(TLS_DIR, "refrag-cert.pem")
 DEFAULT_SSL_KEY = os.path.join(TLS_DIR, "refrag-key.pem")
 
-rooms = RoomManager()
+room = None
 
-# Optional direct-to-device audio sink, shared by every room (see audio_out).
+# Optional direct-to-device audio sink.
 LOCAL_AUDIO = None
 
 
@@ -114,7 +114,7 @@ class RoomSession:
         self._local_sink = None
 
     def _submit_local_audio(self, blk):
-        """Mix a rendered block into the shared local output device, if any."""
+        """Submit a rendered block to the local output device, if any."""
         if LOCAL_AUDIO is None:
             return
         sample_rate, block_size = self._audio_settings()
@@ -124,10 +124,10 @@ class RoomSession:
             elif not LOCAL_AUDIO.matches(sample_rate, block_size):
                 if not self._local_audio_warned:
                     self._local_audio_warned = True
-                    print("[audio-out] room %s runs at %d Hz / %d frames but "
+                    print("[audio-out] server room runs at %d Hz / %d frames but "
                           "the output device is open at %d Hz / %d frames; "
-                          "this room is not sent to the local device."
-                          % (self.room.id, sample_rate, block_size,
+                          "local playback is disabled."
+                          % (sample_rate, block_size,
                              LOCAL_AUDIO.sample_rate, LOCAL_AUDIO.block_size),
                           file=sys.stderr)
                 return
@@ -284,17 +284,28 @@ class RoomSession:
             sender.enqueue_text(msg)
 
 
-sessions = {}
+session = None
 
 
-def get_session(room_id):
-    room = rooms.get(room_id)
-    sess = sessions.get(room.id)
-    if sess is None:
-        sess = RoomSession(room)
-        sessions[room.id] = sess
-        sess.task = asyncio.get_event_loop().create_task(sess.run())
-    return sess
+def get_room():
+    global room
+    if room is None:
+        room = Room()
+    return room
+
+
+def get_session():
+    global session
+    if session is None:
+        session = RoomSession(get_room())
+        session.task = asyncio.get_event_loop().create_task(session.run())
+    return session
+
+
+def reset_runtime():
+    global room, session
+    room = Room()
+    session = None
 
 
 # ---------------------------------------------------------------------------
@@ -335,7 +346,7 @@ async def normalize_sampler_handler(request):
         key = str(body["key"])
     except (json.JSONDecodeError, KeyError, TypeError, ValueError):
         return web.json_response({"error": "invalid normalization request"}, status=400)
-    sess = get_session(str(body.get("room") or "default"))
+    sess = get_session()
     room = sess.room
     with room.lock:
         machine = room.machine(slot)
@@ -398,13 +409,13 @@ async def upload_sample(request):
 
 
 async def presets_handler(request):
-    room = rooms.get(request.query.get("room", "default"))
+    room = get_room()
     mtype = request.match_info["mtype"]
     return web.json_response({"presets": room.list_presets(mtype)})
 
 
 async def export_handler(request):
-    room = rooms.get(request.query.get("room", "default"))
+    room = get_room()
     loop_only = request.query.get("loop") == "1"
     loop = asyncio.get_event_loop()
     audio = await loop.run_in_executor(None, render_song, room, loop_only)
@@ -418,32 +429,30 @@ async def export_handler(request):
 
 
 async def songs_handler(request):
-    return web.json_response({"songs": rooms.list()})
+    return web.json_response({"songs": list_snapshots()})
 
 
 async def load_song_handler(request):
-    room_id = request.query.get("room", "default")
     song = request.query.get("song") or request.query.get("name")
     if not song:
         return web.json_response({"error": "song is required"}, status=400)
-    room = rooms.get(room_id)
+    room = get_room()
     if not room.load_snapshot(song):
         return web.json_response({"error": "song not found"}, status=404)
-    return web.json_response({"ok": True, "song": song, "room": room.id})
+    return web.json_response({"ok": True, "song": song})
 
 
 async def aimatch_handler(request):
     """AI Match: transcribe an uploaded WAV into the current pattern.
 
-    Multipart field 'file' (16-bit mono/stereo WAV); query: room, slot.
+    Multipart field 'file' (16-bit mono/stereo WAV); query: slot.
     Overwrites the machine's current pattern (notes + measure count).
     """
-    room_id = request.query.get("room", "default")
     try:
         slot = int(request.query.get("slot", "-1"))
     except ValueError:
         slot = -1
-    sess = get_session(room_id)
+    sess = get_session()
     room = sess.room
     m = room.machine(slot)
     if m is None:
@@ -490,13 +499,11 @@ async def aimatch_handler(request):
 async def ws_handler(request):
     ws = web.WebSocketResponse(max_msg_size=8 * 1024 * 1024, heartbeat=30)
     await ws.prepare(request)
-    room_id = request.query.get("room", "default")
-    sess = get_session(room_id)
+    sess = get_session()
     room = sess.room
 
     sr, block = sess._audio_settings()
-    await ws.send_str(json.dumps({"type": "hello", "room": room.id,
-                                  "sr": sr, "block": block,
+    await ws.send_str(json.dumps({"type": "hello", "sr": sr, "block": block,
                                   "users": len(sess.sockets) + 1}))
     await ws.send_str(json.dumps({"type": "doc", "rev": room.rev,
                                   "doc": room.doc}))
@@ -562,6 +569,7 @@ async def ws_handler(request):
 
 
 def make_app():
+    reset_runtime()
     # generous upload limit so phone voice memos / recordings fit
     app = web.Application(client_max_size=64 * 1024 * 1024)
     app.router.add_get("/", index)
@@ -569,7 +577,6 @@ def make_app():
     app.router.add_get("/api/samples", samples_handler)
     app.router.add_get("/api/samples/waveform", sample_waveform_handler)
     app.router.add_get("/api/songs", songs_handler)
-    app.router.add_get("/api/rooms", songs_handler)
     app.router.add_get("/api/load", load_song_handler)
     app.router.add_post("/api/samples", upload_sample)
     app.router.add_post("/api/sampler/normalize", normalize_sampler_handler)
@@ -592,13 +599,20 @@ def init_local_audio():
 
 
 async def _start_local_audio_room(app):
-    """Bring up the default room so local playback works with no browser."""
+    """Bring up the room so local playback works with no browser."""
     if LOCAL_AUDIO is not None:
-        get_session("default")
+        get_session()
 
 
 async def _close_local_audio(app):
-    global LOCAL_AUDIO
+    global LOCAL_AUDIO, session
+    sess, session = session, None
+    if sess is not None and sess.task is not None:
+        sess.task.cancel()
+        try:
+            await sess.task
+        except asyncio.CancelledError:
+            pass
     sink, LOCAL_AUDIO = LOCAL_AUDIO, None
     if sink is not None:
         sink.close()

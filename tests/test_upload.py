@@ -10,7 +10,7 @@ from aiohttp import FormData
 from aiohttp.test_utils import AioHTTPTestCase
 
 from server import samples, state
-from server.app import make_app, rooms
+from server.app import get_room, make_app
 
 
 def wav_bytes(duration_s=0.2, freq=440.0):
@@ -89,7 +89,7 @@ class UploadApiTests(AioHTTPTestCase):
                 np.full(2048, 0.8, dtype=np.float32),
             ]))
         name = samples.save_user_sample("normalize shape", shaped.getvalue())
-        room = rooms.get("normalize-sampler-test")
+        room = get_room()
         room.doc = state.new_room_doc()
         room.apply({"op": "add_machine", "slot": 0, "mtype": "sampler"})
         room.apply({
@@ -101,7 +101,7 @@ class UploadApiTests(AioHTTPTestCase):
             "param": "end", "value": 0.49,
         })
         resp = await self.client.post("/api/sampler/normalize", json={
-            "room": room.id, "slot": 0, "key": "A1",
+            "slot": 0, "key": "A1",
         })
         self.assertEqual(resp.status, 200)
         body = await resp.json()

@@ -704,7 +704,7 @@ class RoomEngineTests(unittest.TestCase):
 
     def test_modular_patch(self):
         machine = state.new_machine("modular")
-        room = state.Room("native-modular-test")
+        room = state.Room()
         room.runtime_only = True
         room.doc = state.new_room_doc()
         room.doc["machines"][0] = machine

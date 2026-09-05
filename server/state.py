@@ -1,6 +1,6 @@
 """Collaborative room state and persistence for Refrag.
 
-A Room owns a JSON-serializable document describing the entire rack:
+A Room owns a JSON-serializable document describing the server's single rack:
 machines, their parameters, patterns, effects, mixer strips, master
 section, song sequence and automation.  Mutations arrive as small
 "op" dicts (usually via the WebSocket) and are applied atomically,
@@ -30,6 +30,7 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 SESSION_DIR = os.path.join(DATA_DIR, "sessions")
 PRESET_DIR = os.path.join(DATA_DIR, "presets")
 SAMPLE_DIR = os.path.join(DATA_DIR, "samples")
+ROOM_SNAPSHOT = "default"
 
 DEFAULT_BEATBOX_KIT = ["kick", "snare", "clhat", "ophat", "clap",
                        "tom_lo", "tom_hi", "crash"]
@@ -310,9 +311,19 @@ def new_room_doc():
     }
 
 
+def list_snapshots():
+    if not os.path.isdir(SESSION_DIR):
+        return []
+    songs = []
+    for name in os.listdir(SESSION_DIR):
+        if name.endswith(".json"):
+            songs.append(os.path.splitext(name)[0])
+    return sorted(songs)
+
+
 class Room:
-    def __init__(self, room_id):
-        self.id = room_id
+    def __init__(self):
+        self.id = ROOM_SNAPSHOT
         self.doc = new_room_doc()
         self.lock = threading.RLock()
         self.rev = 0
@@ -327,7 +338,7 @@ class Room:
 
     @property
     def path(self):
-        return os.path.join(SESSION_DIR, _safe_name(self.id) + ".json")
+        return os.path.join(SESSION_DIR, ROOM_SNAPSHOT + ".json")
 
     def load(self):
         try:
@@ -1359,27 +1370,3 @@ class Room:
             self.rev += 1
             self.dirty = True
         return True
-
-
-class RoomManager:
-    def __init__(self):
-        self.rooms = {}
-        self.lock = threading.Lock()
-
-    def list(self):
-        if not os.path.isdir(SESSION_DIR):
-            return []
-        songs = []
-        for name in os.listdir(SESSION_DIR):
-            if name.endswith(".json"):
-                songs.append(os.path.splitext(name)[0])
-        return sorted(songs)
-
-    def get(self, room_id):
-        room_id = _safe_name(room_id or "default")
-        with self.lock:
-            room = self.rooms.get(room_id)
-            if room is None:
-                room = Room(room_id)
-                self.rooms[room_id] = room
-            return room

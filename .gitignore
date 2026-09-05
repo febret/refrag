@@ -2,3 +2,4 @@ data/tls/
 native/build/
 **/__pycache__/**
 .vscode/
+.VSCodeCounter/

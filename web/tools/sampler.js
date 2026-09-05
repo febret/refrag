@@ -405,7 +405,7 @@ function buildSamplerControls(parent, slot, key, s) {
       const r = await fetch("/api/sampler/normalize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ room: App.room, slot, key }),
+        body: JSON.stringify({ slot, key }),
       });
       const res = await r.json();
       if (!r.ok) throw new Error(res.error || "normalize failed");

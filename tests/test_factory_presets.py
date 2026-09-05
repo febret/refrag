@@ -58,7 +58,7 @@ class FactoryPresetTests(unittest.TestCase):
         renders an unparsable expression as silence, so a broken preset trips
         the non-silent assertion below.
         """
-        room = state.Room("preset-test")
+        room = state.Room()
         room.doc = state.new_room_doc()
         for mtype, presets in factory_presets.PRESETS.items():
             room.apply({"op": "add_machine", "slot": 0, "mtype": mtype})

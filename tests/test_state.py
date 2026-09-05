@@ -12,7 +12,7 @@ class StateTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self._orig = state.SESSION_DIR
         state.SESSION_DIR = self.tmp.name
-        self.room = state.Room("test-room")
+        self.room = state.Room()
 
     def tearDown(self):
         state.SESSION_DIR = self._orig
@@ -110,7 +110,7 @@ class StateTests(unittest.TestCase):
         self.assertEqual(
             self.room.machine(0)["patterns"]["D1"]["sampler"]["sample"], "")
         self.room.save(force=True)
-        loaded = state.Room("test-room")
+        loaded = state.Room()
         self.assertEqual(
             loaded.machine(0)["patterns"]["C16"]["sampler"]["sample"], "second")
 
@@ -145,11 +145,10 @@ class StateTests(unittest.TestCase):
         self.room.apply({"op": "set_param", "slot": 0, "param": "flt_cutoff", "value": 0.5})
         self.room.save(force=True)
 
-        manager = state.RoomManager()
-        self.assertIn("test-room", manager.list())
+        self.assertIn(state.ROOM_SNAPSHOT, state.list_snapshots())
 
-        loaded = state.Room("other-room")
-        self.assertTrue(loaded.load_snapshot("test-room"))
+        loaded = state.Room()
+        self.assertTrue(loaded.load_snapshot(state.ROOM_SNAPSHOT))
         self.assertEqual(loaded.doc["name"], "Saved Song")
         self.assertEqual(loaded.machine(0)["params"]["flt_cutoff"], 0.5)
 
@@ -296,14 +295,14 @@ class StateTests(unittest.TestCase):
     def test_audio_config_persists_and_normalizes_legacy_snapshot(self):
         self.room.doc["audio"] = {"sample_rate": 96000, "block_size": 4096}
         self.room.save(force=True)
-        room2 = state.Room("test-room")
+        room2 = state.Room()
         self.assertEqual(room2.doc["audio"]["sample_rate"], 96000)
         self.assertEqual(room2.doc["audio"]["block_size"], 4096)
 
         # Simulate an old snapshot without audio settings.
         del room2.doc["audio"]
         room2.save(force=True)
-        room3 = state.Room("test-room")
+        room3 = state.Room()
         self.assertEqual(room3.doc["audio"]["sample_rate"], 44100)
         self.assertEqual(room3.doc["audio"]["block_size"], 2048)
 

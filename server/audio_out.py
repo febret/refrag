@@ -9,8 +9,7 @@ blocks straight to a local device instead, cutting that latency out.
 selects the system default output device; any other integer is a PortAudio
 device index.  Run ``python -m server.audio_out`` to list available devices.
 
-All rooms mix into a single shared sink, so several rooms playing at once are
-summed together before hitting the device.
+The server's single room writes to this sink when local output is enabled.
 """
 
 import os
@@ -36,10 +35,9 @@ PRIME_BLOCKS = 2
 class LocalAudioOutput:
     """Mixing sink that feeds a PortAudio output stream from render threads.
 
-    Each room writes through its own :class:`RoomSink` cursor, so blocks that
-    cover the same span of time are summed rather than concatenated.  The
-    PortAudio callback drains the ring on its own thread; when it runs dry it
-    emits silence and bumps :attr:`underruns`.
+    The room writes through a :class:`RoomSink` cursor while the PortAudio
+    callback drains the ring on its own thread; when it runs dry it emits
+    silence and bumps :attr:`underruns`.
     """
 
     def __init__(self, device=DEFAULT_DEVICE, ring_blocks=RING_BLOCKS,
@@ -64,7 +62,7 @@ class LocalAudioOutput:
         """Start the output stream.  Returns True once running.
 
         Safe to call repeatedly; only the first call opens a stream.  Later
-        calls with a different format are ignored (rooms are not resampled);
+        calls with a different format are ignored (audio is not resampled);
         use :meth:`matches` to detect that case.
         """
         with self._lock:
@@ -118,7 +116,7 @@ class LocalAudioOutput:
                 and self.block_size == int(block_size))
 
     def room_sink(self):
-        """Create an independent write cursor for one room."""
+        """Create a write cursor for the room render loop."""
         return RoomSink(self)
 
     # -- data flow ---------------------------------------------------------
@@ -143,8 +141,8 @@ class LocalAudioOutput:
             if n > size:
                 data = data[:, -size:]
                 n = size
-            # A new or drifted room joins at the read cursor so it lines up
-            # with audio other rooms have already queued for the same instant.
+            # A new or drifted writer joins at the read cursor so latency stays
+            # bounded after pauses or scheduling hiccups.
             latest = self._pos + size - n
             if cursor is None or cursor < self._pos or cursor > latest:
                 cursor = min(self._pos, latest)

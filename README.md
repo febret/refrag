@@ -34,8 +34,8 @@ extension, which the server requires. It needs a C++20 compiler (MSVC, Clang or
 GCC); CMake and Ninja are fetched automatically. Rebuild it with the same
 command after changing anything under `native/`.
 
-Open `https://localhost:8000`. To choose a collaborative room, use
-`https://localhost:8000/?room=your-room`. Share that URL with other musicians.
+Open `https://localhost:8000` and share that server URL with other musicians.
+Each running server hosts one collaborative room.
 Set `REFRAG_PORT` before launching to use a port other than 8000.
 
 Refrag always uses HTTPS. On first launch it creates a self-signed certificate
@@ -70,7 +70,7 @@ restart to regenerate the self-signed certificate.
 
 ## Architecture
 
-- `server/app.py` serves the web app, room API, WebSocket, transport clock, and
+- `server/app.py` serves the web app, single-room API, WebSocket, transport clock, and
   WAV export.
 - `server/state.py` owns collaborative room state and JSON persistence.
 - `native/` implements all 12 machine families, all 16 insert effects, mixer
